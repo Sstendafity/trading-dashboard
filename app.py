@@ -286,7 +286,7 @@ else:
     def get_type(row):
         if row['Realised P&L(INR)'] > 0: return 'Win'
         elif row['Realised P&L(INR)'] < 0: return 'Loss'
-        return 'Breakeven'
+        return 'Order Fee'
     df_filtered['Type'] = df_filtered.apply(get_type, axis=1)
 
     # --- ROW 1: GLOBAL SCORECARD ---
