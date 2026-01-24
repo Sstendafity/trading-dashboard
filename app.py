@@ -37,6 +37,13 @@ st.markdown("""
     .green-text { color: #2ca02c; }
     .red-text { color: #d62728; }
     .normal-text { color: #333; }
+    
+    /* Make buttons smaller for shortcuts */
+    div.stButton > button:first-child {
+        height: 2em;
+        padding-top: 0px;
+        padding-bottom: 0px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -174,18 +181,52 @@ if not df.empty:
     all_accounts = df['Account'].unique().tolist()
     all_contracts = df['Contract'].unique().tolist()
     all_sides = df['Side'].unique().tolist()
-    # NEW: Aggregation Options
     timeframes = ["Daily", "Weekly", "Monthly", "Yearly"]
 
+    # Initialize Session State
     if 'f_date' not in st.session_state: st.session_state['f_date'] = (min_d, max_d)
     if 'f_acc' not in st.session_state: st.session_state['f_acc'] = all_accounts
     if 'f_con' not in st.session_state: st.session_state['f_con'] = all_contracts
     if 'f_side' not in st.session_state: st.session_state['f_side'] = all_sides
-    if 'f_freq' not in st.session_state: st.session_state['f_freq'] = "Daily" # Default
+    if 'f_freq' not in st.session_state: st.session_state['f_freq'] = "Daily"
 
     with st.expander("🛠️ Filter Options (Click to Expand)", expanded=False):
         
-        if st.button("🔄 Reset Filters"):
+        # --- QUICK DATE SHORTCUTS ---
+        st.write("**Quick Select:**")
+        cols_q = st.columns(7)
+        
+        today = datetime.date.today()
+        
+        if cols_q[0].button("All Time"):
+            st.session_state['f_date'] = (min_d, max_d)
+            st.rerun()
+            
+        if cols_q[1].button("Today"):
+            st.session_state['f_date'] = (today, today)
+            st.rerun()
+            
+        if cols_q[2].button("Yesterday"):
+            yesterday = today - datetime.timedelta(days=1)
+            st.session_state['f_date'] = (yesterday, yesterday)
+            st.rerun()
+            
+        if cols_q[3].button("This Week"):
+            start = today - datetime.timedelta(days=today.weekday()) # Monday
+            st.session_state['f_date'] = (start, today)
+            st.rerun()
+            
+        if cols_q[4].button("This Month"):
+            start = today.replace(day=1)
+            st.session_state['f_date'] = (start, today)
+            st.rerun()
+            
+        if cols_q[5].button("This Year"):
+            start = today.replace(month=1, day=1)
+            st.session_state['f_date'] = (start, today)
+            st.rerun()
+
+        if cols_q[6].button("Reset All"):
             st.session_state['f_date'] = (min_d, max_d)
             st.session_state['f_acc'] = all_accounts
             st.session_state['f_con'] = all_contracts
@@ -193,13 +234,14 @@ if not df.empty:
             st.session_state['f_freq'] = "Daily"
             st.rerun()
             
+        st.divider()
+            
         c1, c2 = st.columns([1, 2])
         
         with c1:
             st.date_input("Select Date Range", 
                           min_value=min_d, max_value=max_d,
                           key='f_date') 
-            # NEW: Timeframe Selector
             st.selectbox("Timeframe Aggregation", timeframes, key='f_freq')
         
         with c2:
@@ -207,6 +249,7 @@ if not df.empty:
             st.multiselect("Contract", all_contracts, key='f_con')
             st.multiselect("Side", all_sides, key='f_side')
 
+    # Apply Logic
     date_range = st.session_state['f_date']
     
     if isinstance(date_range, tuple) and len(date_range) == 2:
@@ -229,10 +272,8 @@ else:
 if df_filtered.empty:
     st.info("👋 No data found. Please run 'migrate.py' or upload files.")
 else:
-    # --- PRE-CALCULATE DATETIME FOR ALL CHARTS ---
-    # We do this once here so both the Equity Curve AND the Aggregation logic can use it
+    # --- PRE-CALCULATE DATETIME ---
     raw_ts = df_filtered['Date'].astype(str) + ' ' + df_filtered['Time'].astype(str)
-    # Safe slice to ensure HH:MM:SS format
     clean_ts = raw_ts.str.slice(0, 19)
     df_filtered['Datetime'] = pd.to_datetime(clean_ts, format='%Y-%m-%d %H:%M:%S', errors='coerce')
     
@@ -313,7 +354,7 @@ else:
     tab_dashboard, tab_raw = st.tabs(["📊 Graphical Report", "📄 Raw Data"])
 
     with tab_dashboard:
-        # 1. EQUITY CURVE (Keep granular for accuracy)
+        # 1. EQUITY CURVE
         st.subheader("Cumulative Net P&L")
         
         df_sorted = df_filtered.sort_values(by='Datetime')
@@ -369,26 +410,20 @@ else:
         )
         st.plotly_chart(fig_equity, key="equity")
         
-        # 2. PERIOD P&L (DYNAMIC AGGREGATION)
+        # 2. PERIOD P&L
         freq_choice = st.session_state['f_freq']
         st.subheader(f"{freq_choice} Net P&L")
         
-        # Prepare Grouping
         df_period = df_filtered.copy()
         
         if freq_choice == "Weekly":
-            # Group by Week (Monday Start)
             period_pnl = df_period.groupby(pd.Grouper(key='Datetime', freq='W-MON'))['Net PnL'].sum().reset_index()
         elif freq_choice == "Monthly":
-            # Group by Month
             period_pnl = df_period.groupby(pd.Grouper(key='Datetime', freq='ME'))['Net PnL'].sum().reset_index()
         elif freq_choice == "Yearly":
-            # Group by Year
             period_pnl = df_period.groupby(pd.Grouper(key='Datetime', freq='YE'))['Net PnL'].sum().reset_index()
         else:
-            # Default to Daily (Use 'Date' column directly to keep it simple)
             period_pnl = df_period.groupby('Date')['Net PnL'].sum().reset_index()
-            # Rename for consistency
             period_pnl.rename(columns={'Date': 'Datetime'}, inplace=True)
 
         period_pnl['Color'] = period_pnl['Net PnL'].apply(lambda x: '#2E7D32' if x >= 0 else '#D32F2F')
