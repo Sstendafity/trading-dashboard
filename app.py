@@ -4,16 +4,15 @@ import plotly.graph_objects as go
 import plotly.express as px
 import os
 import datetime
-from github import Github  # NEW LIBRARY
+from github import Github
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide")
 MASTER_DB = "trade_history.csv"
 
 # --- CONFIGURATION FOR GITHUB ---
-# This grabs the token you saved in Step 2
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"] if "GITHUB_TOKEN" in st.secrets else None
-REPO_NAME = "Sstendafity/trading-dashboard" # <--- CHANGE THIS TO YOUR REPO NAME (e.g., "johndoe/trading-dashboard")
+REPO_NAME = "Sstendafity/trading-dashboard"  # <--- REMEMBER TO CHANGE THIS
 
 # --- CUSTOM CSS ---
 st.markdown("""
@@ -58,18 +57,16 @@ def custom_metric(label, value, color_condition="normal"):
 def update_github_repo(csv_content):
     """Pushes the updated CSV content directly to GitHub"""
     if not GITHUB_TOKEN or "your-username" in REPO_NAME:
-        st.warning("⚠️ GitHub Token or Repo Name not configured in code!")
+        st.warning("⚠️ GitHub Token or Repo Name not configured properly in code!")
         return False
         
     try:
         g = Github(GITHUB_TOKEN)
         repo = g.get_repo(REPO_NAME)
-        # Try to get the file to update it
         try:
             contents = repo.get_contents(MASTER_DB)
             repo.update_file(contents.path, "Update trade history via App", csv_content, contents.sha)
         except:
-            # If file doesn't exist, create it
             repo.create_file(MASTER_DB, "Create trade history via App", csv_content)
         return True
     except Exception as e:
@@ -92,16 +89,24 @@ def save_to_master(new_df):
     # 1. Load existing data
     if os.path.exists(MASTER_DB):
         old_df = pd.read_csv(MASTER_DB)
-        combined = pd.concat([old_df, new_df], ignore_index=True)
-        if 'Order ID' in combined.columns:
-            combined = combined.drop_duplicates(subset=['Order ID'], keep='first')
     else:
-        combined = new_df
+        old_df = pd.DataFrame()
+
+    # 2. Combine Data
+    combined = pd.concat([old_df, new_df], ignore_index=True)
     
-    # 2. Save locally (for immediate view)
+    # 3. ROBUST DEDUPLICATION (The Fix)
+    if 'Order ID' in combined.columns:
+        # Force Order ID to string to ensure '123' == 123 matches
+        combined['Order ID'] = combined['Order ID'].astype(str)
+        
+        # Remove duplicates, keeping the LAST occurrence (the newest upload)
+        combined = combined.drop_duplicates(subset=['Order ID'], keep='last')
+
+    # 4. Save locally
     combined.to_csv(MASTER_DB, index=False)
     
-    # 3. Save to GitHub (for permanence)
+    # 5. Save to GitHub
     csv_str = combined.to_csv(index=False)
     success = update_github_repo(csv_str)
     
@@ -127,6 +132,10 @@ def normalize_raw_data(file):
         df_raw['Trading Fees(INR)'] = df_raw['Trading Fees'] * conversion_rate
         
     df_raw['Account'] = account_name
+    
+    # Ensure Order ID is treated as a string early on
+    if 'Order ID' in df_raw.columns:
+        df_raw['Order ID'] = df_raw['Order ID'].astype(str)
     
     target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
                    'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
@@ -156,6 +165,7 @@ with st.sidebar:
                     st.error(f"Error reading {f.name}: {e}")
             if new_data_list:
                 full_new_data = pd.concat(new_data_list)
+                
                 # SAVE LOCALLY AND PUSH TO GITHUB
                 _, success = save_to_master(full_new_data)
                 
@@ -174,7 +184,7 @@ if not df.empty:
     min_d = df['Date'].min().date()
     max_d = df['Date'].max().date()
     
-    # Standard lists for compatibility
+    # FIX: Convert to lists for Streamlit compatibility
     all_accounts = df['Account'].unique().tolist()
     all_contracts = df['Contract'].unique().tolist()
     all_sides = df['Side'].unique().tolist()
