@@ -242,7 +242,7 @@ else:
     def get_type(row):
         if row['Realised P&L(INR)'] > 0: return 'Win'
         elif row['Realised P&L(INR)'] < 0: return 'Loss'
-        return 'Breakeven'
+        return 'Order Fee'
     df_filtered['Type'] = df_filtered.apply(get_type, axis=1)
 
     # --- ROW 1: GLOBAL SCORECARD ---
@@ -267,14 +267,14 @@ else:
     gr_color = "green" if total_gross > total_fees else ("red" if total_gross < total_fees else "normal")
 
     k1, k2, k3, k4 = st.columns(4)
-    with k1: custom_metric("Net P&L (INR)", f"₹ {total_net:,.0f}", net_color)
-    with k2: custom_metric("Gross P&L", f"₹ {total_gross:,.0f}", gr_color)
-    with k3: custom_metric("Total Fees", f"₹ {total_fees:,.0f}", "red") 
+    with k1: custom_metric("Net P&L (INR)", f"₹ {total_net:,.2f}", net_color)
+    with k2: custom_metric("Gross P&L", f"₹ {total_gross:,.2f}", gr_color)
+    with k3: custom_metric("Total Fees", f"₹ {total_fees:,.2f}", "red") 
     with k4: custom_metric("Win Rate", f"{global_wr:.2f}%", wr_color)
 
     m1, m2, m3, m4 = st.columns(4)
-    with m1: custom_metric("Max Win", f"₹ {max_win:,.0f}", "green")
-    with m2: custom_metric("Max Loss", f"₹ {max_loss:,.0f}", "red")
+    with m1: custom_metric("Max Win", f"₹ {max_win:,.2f}", "green")
+    with m2: custom_metric("Max Loss", f"₹ {max_loss:,.2f}", "red")
     
     st.divider()
 
@@ -302,7 +302,7 @@ else:
                     <div class="metric-label">{acc} Win Rate and Net P&L</div>
                     <div class="metric-value {wr_class}">{acc_wr:.2f}%</div>
                     <div style="font-size: 24px; font-weight: bold; margin-top:5px;" class="{net_class}">
-                        ₹ {acc_net:,.0f}
+                        ₹ {acc_net:,.2f}
                     </div>
                 </div>
                 """
