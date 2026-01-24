@@ -183,7 +183,6 @@ if not df.empty:
     all_sides = df['Side'].unique().tolist()
     timeframes = ["Daily", "Weekly", "Monthly", "Yearly"]
 
-    # Initialize Session State
     if 'f_date' not in st.session_state: st.session_state['f_date'] = (min_d, max_d)
     if 'f_acc' not in st.session_state: st.session_state['f_acc'] = all_accounts
     if 'f_con' not in st.session_state: st.session_state['f_con'] = all_contracts
@@ -192,54 +191,59 @@ if not df.empty:
 
     with st.expander("🛠️ Filter Options (Click to Expand)", expanded=False):
         
-        # --- QUICK DATE SHORTCUTS ---
-        st.write("**Quick Select:**")
-        cols_q = st.columns(7)
+        # --- TOP ROW: RESET & STATUS ---
+        k1, k2 = st.columns([1, 4])
+        with k1:
+             if st.button("🔄 Reset All", use_container_width=True):
+                st.session_state['f_date'] = (min_d, max_d)
+                st.session_state['f_acc'] = all_accounts
+                st.session_state['f_con'] = all_contracts
+                st.session_state['f_side'] = all_sides
+                st.session_state['f_freq'] = "Daily"
+                st.rerun()
         
+        st.markdown("---") # Separator line
+        
+        # --- MIDDLE: QUICK DATE SHORTCUTS (The Fix for Untidy Look) ---
+        # We use 2 rows of 3 buttons. This is symmetric and clean.
+        st.write("**Quick Date Ranges:**")
         today = datetime.date.today()
         
-        if cols_q[0].button("All Time"):
-            st.session_state['f_date'] = (min_d, max_d)
-            st.rerun()
-            
-        if cols_q[1].button("Today"):
+        # Row 1
+        r1_col1, r1_col2, r1_col3 = st.columns(3)
+        if r1_col1.button("📅 Today", use_container_width=True):
             st.session_state['f_date'] = (today, today)
             st.rerun()
-            
-        if cols_q[2].button("Yesterday"):
+        if r1_col2.button("⏪ Yesterday", use_container_width=True):
             yesterday = today - datetime.timedelta(days=1)
             st.session_state['f_date'] = (yesterday, yesterday)
             st.rerun()
-            
-        if cols_q[3].button("This Week"):
-            start = today - datetime.timedelta(days=today.weekday()) # Monday
+        if r1_col3.button("📆 This Week", use_container_width=True):
+            start = today - datetime.timedelta(days=today.weekday())
             st.session_state['f_date'] = (start, today)
             st.rerun()
             
-        if cols_q[4].button("This Month"):
+        # Row 2
+        r2_col1, r2_col2, r2_col3 = st.columns(3)
+        if r2_col1.button("🗓️ This Month", use_container_width=True):
             start = today.replace(day=1)
             st.session_state['f_date'] = (start, today)
             st.rerun()
-            
-        if cols_q[5].button("This Year"):
+        if r2_col2.button("📅 This Year", use_container_width=True):
             start = today.replace(month=1, day=1)
             st.session_state['f_date'] = (start, today)
             st.rerun()
-
-        if cols_q[6].button("Reset All"):
+        if r2_col3.button("∞ All Time", use_container_width=True):
             st.session_state['f_date'] = (min_d, max_d)
-            st.session_state['f_acc'] = all_accounts
-            st.session_state['f_con'] = all_contracts
-            st.session_state['f_side'] = all_sides
-            st.session_state['f_freq'] = "Daily"
             st.rerun()
+
+        st.markdown("---") # Separator line
             
-        st.divider()
-            
+        # --- BOTTOM: FINE TUNING ---
         c1, c2 = st.columns([1, 2])
         
         with c1:
-            st.date_input("Select Date Range", 
+            st.date_input("Custom Date Range", 
                           min_value=min_d, max_value=max_d,
                           key='f_date') 
             st.selectbox("Timeframe Aggregation", timeframes, key='f_freq')
