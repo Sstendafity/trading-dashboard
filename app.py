@@ -55,7 +55,6 @@ def custom_metric(label, value, color_condition="normal"):
 
 # --- GITHUB SYNC FUNCTION ---
 def update_github_repo(csv_content):
-    """Pushes the updated CSV content directly to GitHub"""
     if not GITHUB_TOKEN or "your-username" in REPO_NAME:
         st.warning("⚠️ GitHub Token or Repo Name not configured properly in code!")
         return False
@@ -86,27 +85,18 @@ def load_master_db():
     return pd.DataFrame(columns=['Account', 'Date', 'Time', 'Contract', 'Side', 'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID'])
 
 def save_to_master(new_df):
-    # 1. Load existing data
     if os.path.exists(MASTER_DB):
         old_df = pd.read_csv(MASTER_DB)
     else:
         old_df = pd.DataFrame()
 
-    # 2. Combine Data
     combined = pd.concat([old_df, new_df], ignore_index=True)
     
-    # 3. ROBUST DEDUPLICATION (The Fix)
     if 'Order ID' in combined.columns:
-        # Force Order ID to string to ensure '123' == 123 matches
         combined['Order ID'] = combined['Order ID'].astype(str)
-        
-        # Remove duplicates, keeping the LAST occurrence (the newest upload)
         combined = combined.drop_duplicates(subset=['Order ID'], keep='last')
 
-    # 4. Save locally
     combined.to_csv(MASTER_DB, index=False)
-    
-    # 5. Save to GitHub
     csv_str = combined.to_csv(index=False)
     success = update_github_repo(csv_str)
     
@@ -133,7 +123,6 @@ def normalize_raw_data(file):
         
     df_raw['Account'] = account_name
     
-    # Ensure Order ID is treated as a string early on
     if 'Order ID' in df_raw.columns:
         df_raw['Order ID'] = df_raw['Order ID'].astype(str)
     
@@ -165,8 +154,6 @@ with st.sidebar:
                     st.error(f"Error reading {f.name}: {e}")
             if new_data_list:
                 full_new_data = pd.concat(new_data_list)
-                
-                # SAVE LOCALLY AND PUSH TO GITHUB
                 _, success = save_to_master(full_new_data)
                 
                 if success:
@@ -184,23 +171,26 @@ if not df.empty:
     min_d = df['Date'].min().date()
     max_d = df['Date'].max().date()
     
-    # FIX: Convert to lists for Streamlit compatibility
     all_accounts = df['Account'].unique().tolist()
     all_contracts = df['Contract'].unique().tolist()
     all_sides = df['Side'].unique().tolist()
+    # NEW: Aggregation Options
+    timeframes = ["Daily", "Weekly", "Monthly", "Yearly"]
 
     if 'f_date' not in st.session_state: st.session_state['f_date'] = (min_d, max_d)
     if 'f_acc' not in st.session_state: st.session_state['f_acc'] = all_accounts
     if 'f_con' not in st.session_state: st.session_state['f_con'] = all_contracts
     if 'f_side' not in st.session_state: st.session_state['f_side'] = all_sides
+    if 'f_freq' not in st.session_state: st.session_state['f_freq'] = "Daily" # Default
 
     with st.expander("🛠️ Filter Options (Click to Expand)", expanded=False):
         
-        if st.button("🔄 Reset Filters (Show All Data)"):
+        if st.button("🔄 Reset Filters"):
             st.session_state['f_date'] = (min_d, max_d)
             st.session_state['f_acc'] = all_accounts
             st.session_state['f_con'] = all_contracts
             st.session_state['f_side'] = all_sides
+            st.session_state['f_freq'] = "Daily"
             st.rerun()
             
         c1, c2 = st.columns([1, 2])
@@ -209,6 +199,8 @@ if not df.empty:
             st.date_input("Select Date Range", 
                           min_value=min_d, max_value=max_d,
                           key='f_date') 
+            # NEW: Timeframe Selector
+            st.selectbox("Timeframe Aggregation", timeframes, key='f_freq')
         
         with c2:
             st.multiselect("Account", all_accounts, key='f_acc')
@@ -237,12 +229,19 @@ else:
 if df_filtered.empty:
     st.info("👋 No data found. Please run 'migrate.py' or upload files.")
 else:
+    # --- PRE-CALCULATE DATETIME FOR ALL CHARTS ---
+    # We do this once here so both the Equity Curve AND the Aggregation logic can use it
+    raw_ts = df_filtered['Date'].astype(str) + ' ' + df_filtered['Time'].astype(str)
+    # Safe slice to ensure HH:MM:SS format
+    clean_ts = raw_ts.str.slice(0, 19)
+    df_filtered['Datetime'] = pd.to_datetime(clean_ts, format='%Y-%m-%d %H:%M:%S', errors='coerce')
+    
     df_filtered['Net PnL'] = df_filtered['Realised P&L(INR)'] - df_filtered['Trading Fees(INR)']
     
     def get_type(row):
         if row['Realised P&L(INR)'] > 0: return 'Win'
         elif row['Realised P&L(INR)'] < 0: return 'Loss'
-        return 'Order Fee'
+        return 'Breakeven'
     df_filtered['Type'] = df_filtered.apply(get_type, axis=1)
 
     # --- ROW 1: GLOBAL SCORECARD ---
@@ -314,13 +313,10 @@ else:
     tab_dashboard, tab_raw = st.tabs(["📊 Graphical Report", "📄 Raw Data"])
 
     with tab_dashboard:
+        # 1. EQUITY CURVE (Keep granular for accuracy)
         st.subheader("Cumulative Net P&L")
         
-        df_sorted = df_filtered.copy()
-        raw_ts = df_sorted['Date'].astype(str) + ' ' + df_sorted['Time'].astype(str)
-        clean_ts = raw_ts.str.slice(0, 19)
-        df_sorted['Datetime'] = pd.to_datetime(clean_ts, format='%Y-%m-%d %H:%M:%S')
-        df_sorted = df_sorted.sort_values(by='Datetime')
+        df_sorted = df_filtered.sort_values(by='Datetime')
         df_sorted['Equity'] = df_sorted['Net PnL'].cumsum()
         
         df_sorted = df_sorted.reset_index(drop=True)
@@ -373,16 +369,37 @@ else:
         )
         st.plotly_chart(fig_equity, key="equity")
         
-        st.subheader("Daily Net P&L")
-        daily_pnl = df_filtered.groupby('Date')['Net PnL'].sum().reset_index()
-        daily_pnl['Color'] = daily_pnl['Net PnL'].apply(lambda x: '#2E7D32' if x >= 0 else '#D32F2F')
+        # 2. PERIOD P&L (DYNAMIC AGGREGATION)
+        freq_choice = st.session_state['f_freq']
+        st.subheader(f"{freq_choice} Net P&L")
+        
+        # Prepare Grouping
+        df_period = df_filtered.copy()
+        
+        if freq_choice == "Weekly":
+            # Group by Week (Monday Start)
+            period_pnl = df_period.groupby(pd.Grouper(key='Datetime', freq='W-MON'))['Net PnL'].sum().reset_index()
+        elif freq_choice == "Monthly":
+            # Group by Month
+            period_pnl = df_period.groupby(pd.Grouper(key='Datetime', freq='ME'))['Net PnL'].sum().reset_index()
+        elif freq_choice == "Yearly":
+            # Group by Year
+            period_pnl = df_period.groupby(pd.Grouper(key='Datetime', freq='YE'))['Net PnL'].sum().reset_index()
+        else:
+            # Default to Daily (Use 'Date' column directly to keep it simple)
+            period_pnl = df_period.groupby('Date')['Net PnL'].sum().reset_index()
+            # Rename for consistency
+            period_pnl.rename(columns={'Date': 'Datetime'}, inplace=True)
+
+        period_pnl['Color'] = period_pnl['Net PnL'].apply(lambda x: '#2E7D32' if x >= 0 else '#D32F2F')
+        
         fig_daily = go.Figure()
         fig_daily.add_trace(go.Bar(
-            x=daily_pnl['Date'], y=daily_pnl['Net PnL'], 
-            marker_color=daily_pnl['Color']
+            x=period_pnl['Datetime'], y=period_pnl['Net PnL'], 
+            marker_color=period_pnl['Color']
         ))
         fig_daily.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0))
-        st.plotly_chart(fig_daily, key="daily")
+        st.plotly_chart(fig_daily, key="period_pnl")
 
         st.markdown("<br>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
