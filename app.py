@@ -175,8 +175,13 @@ df_filtered = pd.DataFrame()
 
 if not df.empty:
     df['Date'] = pd.to_datetime(df['Date'])
+    
+    # --- FIX: SAFE BOUNDARIES ---
+    # 1. min_d is the earliest data point
     min_d = df['Date'].min().date()
-    max_d = df['Date'].max().date()
+    # 2. max_d is EITHER the latest data OR Today (whichever is later)
+    # This prevents the "Today > Max" error
+    max_d = max(df['Date'].max().date(), datetime.date.today())
     
     all_accounts = df['Account'].unique().tolist()
     all_contracts = df['Contract'].unique().tolist()
@@ -191,7 +196,6 @@ if not df.empty:
 
     with st.expander("🛠️ Filter Options (Click to Expand)", expanded=False):
         
-        # --- TOP ROW: RESET & STATUS ---
         k1, k2 = st.columns([1, 4])
         with k1:
              if st.button("🔄 Reset All", use_container_width=True):
@@ -202,44 +206,51 @@ if not df.empty:
                 st.session_state['f_freq'] = "Daily"
                 st.rerun()
         
-        st.markdown("---") # Separator line
+        st.markdown("---") 
         
-        # --- MIDDLE: QUICK DATE SHORTCUTS (The Fix for Untidy Look) ---
-        # We use 2 rows of 3 buttons. This is symmetric and clean.
         st.write("**Quick Date Ranges:**")
         today = datetime.date.today()
         
+        # --- SAFE DATE SETTER FUNCTION ---
+        def set_date_range(start, end):
+            # Clamp Start: Cannot be earlier than min_d
+            safe_start = max(start, min_d)
+            # Clamp End: Cannot be later than max_d
+            safe_end = min(end, max_d)
+            # Ensure Start isn't after End (rare edge case)
+            if safe_start > safe_end: safe_start = safe_end
+            
+            st.session_state['f_date'] = (safe_start, safe_end)
+            st.rerun()
+
         # Row 1
         r1_col1, r1_col2, r1_col3 = st.columns(3)
         if r1_col1.button("📅 Today", use_container_width=True):
-            st.session_state['f_date'] = (today, today)
-            st.rerun()
+            set_date_range(today, today)
+            
         if r1_col2.button("⏪ Yesterday", use_container_width=True):
             yesterday = today - datetime.timedelta(days=1)
-            st.session_state['f_date'] = (yesterday, yesterday)
-            st.rerun()
+            set_date_range(yesterday, yesterday)
+            
         if r1_col3.button("📆 This Week", use_container_width=True):
             start = today - datetime.timedelta(days=today.weekday())
-            st.session_state['f_date'] = (start, today)
-            st.rerun()
+            set_date_range(start, today)
             
         # Row 2
         r2_col1, r2_col2, r2_col3 = st.columns(3)
         if r2_col1.button("🗓️ This Month", use_container_width=True):
             start = today.replace(day=1)
-            st.session_state['f_date'] = (start, today)
-            st.rerun()
+            set_date_range(start, today)
+            
         if r2_col2.button("📅 This Year", use_container_width=True):
             start = today.replace(month=1, day=1)
-            st.session_state['f_date'] = (start, today)
-            st.rerun()
-        if r2_col3.button("∞ All Time", use_container_width=True):
-            st.session_state['f_date'] = (min_d, max_d)
-            st.rerun()
-
-        st.markdown("---") # Separator line
+            set_date_range(start, today)
             
-        # --- BOTTOM: FINE TUNING ---
+        if r2_col3.button("∞ All Time", use_container_width=True):
+            set_date_range(min_d, max_d)
+
+        st.markdown("---") 
+            
         c1, c2 = st.columns([1, 2])
         
         with c1:
@@ -274,7 +285,10 @@ else:
 # --- DASHBOARD CONTENT ---
 
 if df_filtered.empty:
-    st.info("👋 No data found. Please run 'migrate.py' or upload files.")
+    if not df.empty:
+        st.info("ℹ️ No trades found for the selected date range.")
+    else:
+        st.info("👋 No data found. Please run 'migrate.py' or upload files.")
 else:
     # --- PRE-CALCULATE DATETIME ---
     raw_ts = df_filtered['Date'].astype(str) + ' ' + df_filtered['Time'].astype(str)
