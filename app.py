@@ -369,16 +369,22 @@ else:
     st.divider()
 
     # --- CHARTS ---
-    # CONFIG: Show Toolbar, but Disable Scroll Zooming
-    CHART_CONFIG = {'displayModeBar': True, 'scrollZoom': False}
-
     tab_dashboard, tab_raw = st.tabs(["📊 Graphical Report", "📄 Raw Data"])
 
     with tab_dashboard:
-        # --- LOCK BUTTON ---
-        c_lock, _ = st.columns([1, 5])
-        if c_lock.button("🔒 Restore Safe Scroll (Exit Zoom)", type="primary", help="Click this if the chart gets stuck in zoom mode"):
-            st.rerun()
+        # --- THE FIX: INTERACTION TOGGLE & KEY RESET ---
+        enable_zoom = st.toggle("Enable Zooming & Interaction", value=False)
+        
+        if enable_zoom:
+            chart_config = {'displayModeBar': True, 'scrollZoom': True}
+            drag_mode = "zoom" 
+            st.caption("✅ Zoom Enabled: You can pinch/drag charts. Toggle OFF to reset & lock.")
+        else:
+            chart_config = {'displayModeBar': False, 'scrollZoom': False}
+            drag_mode = False 
+        
+        # We append the toggle state to the 'key' to force a full reset/re-render
+        chart_key_suffix = f"_{enable_zoom}"
 
         # 1. EQUITY CURVE
         st.subheader("Cumulative Net P&L")
@@ -428,16 +434,15 @@ else:
             name='Drawdown'
         ))
         
-        # FIX: dragmode=False prevents accidental scroll-hijacking
         fig_equity.update_layout(
             margin=dict(l=0, r=0, t=10, b=0), 
             height=350,
             hovermode="x unified",
-            dragmode=False, # <--- The Magic Fix
+            dragmode=drag_mode,
             xaxis=dict(showgrid=False),
             yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
         )
-        st.plotly_chart(fig_equity, key="equity", config=CHART_CONFIG)
+        st.plotly_chart(fig_equity, key=f"equity{chart_key_suffix}", config=chart_config)
         
         # 2. PERIOD P&L
         freq_choice = st.session_state['f_freq']
@@ -462,8 +467,8 @@ else:
             x=period_pnl['Datetime'], y=period_pnl['Net PnL'], 
             marker_color=period_pnl['Color']
         ))
-        fig_daily.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0), dragmode=False)
-        st.plotly_chart(fig_daily, key="period_pnl", config=CHART_CONFIG)
+        fig_daily.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0), dragmode=drag_mode)
+        st.plotly_chart(fig_daily, key=f"period_pnl{chart_key_suffix}", config=chart_config)
 
         st.markdown("<br>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
@@ -475,24 +480,24 @@ else:
                 hourly_pnl = df_filtered.groupby('Hour')['Net PnL'].sum().reset_index()
                 fig_hour = px.bar(hourly_pnl, x='Hour', y='Net PnL', color='Net PnL', 
                                   color_continuous_scale=['#D32F2F', '#FDD835', '#2E7D32']) 
-                fig_hour.update_layout(coloraxis_showscale=False, height=200, margin=dict(l=0,r=0,t=0,b=0), dragmode=False)
-                st.plotly_chart(fig_hour, key="hour", width='stretch', config=CHART_CONFIG)
+                fig_hour.update_layout(coloraxis_showscale=False, height=200, margin=dict(l=0,r=0,t=0,b=0), dragmode=drag_mode)
+                st.plotly_chart(fig_hour, key=f"hour{chart_key_suffix}", width='stretch', config=chart_config)
         with c2:
             with st.container(border=True):
                 st.markdown("**Fee Drain**")
                 metrics = pd.DataFrame({'Metric': ['Gross Profit', 'Trading Fees'], 'Value': [total_gross, total_fees]})
                 fig_fees = px.bar(metrics, x='Metric', y='Value', color='Metric', 
                                   color_discrete_map={'Gross Profit': '#2E7D32', 'Trading Fees': '#D32F2F'})
-                fig_fees.update_layout(showlegend=False, height=200, margin=dict(l=0,r=0,t=0,b=0), dragmode=False)
-                st.plotly_chart(fig_fees, key="fees", width='stretch', config=CHART_CONFIG)
+                fig_fees.update_layout(showlegend=False, height=200, margin=dict(l=0,r=0,t=0,b=0), dragmode=drag_mode)
+                st.plotly_chart(fig_fees, key=f"fees{chart_key_suffix}", width='stretch', config=chart_config)
         with c3:
             with st.container(border=True):
                 st.markdown("**Long vs. Short**")
                 side_pnl = df_filtered.groupby('Side')['Net PnL'].sum().reset_index()
                 fig_side = px.bar(side_pnl, y='Side', x='Net PnL', orientation='h', 
                                   color='Net PnL', color_continuous_scale=['#D32F2F', '#2E7D32'])
-                fig_side.update_layout(coloraxis_showscale=False, height=200, margin=dict(l=0,r=0,t=0,b=0), dragmode=False)
-                st.plotly_chart(fig_side, key="side", width='stretch', config=CHART_CONFIG)
+                fig_side.update_layout(coloraxis_showscale=False, height=200, margin=dict(l=0,r=0,t=0,b=0), dragmode=drag_mode)
+                st.plotly_chart(fig_side, key=f"side{chart_key_suffix}", width='stretch', config=chart_config)
 
     with tab_raw:
         def highlight_pnl(val):
