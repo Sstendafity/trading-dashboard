@@ -375,6 +375,11 @@ else:
     tab_dashboard, tab_raw = st.tabs(["📊 Graphical Report", "📄 Raw Data"])
 
     with tab_dashboard:
+        # --- LOCK BUTTON ---
+        c_lock, _ = st.columns([1, 5])
+        if c_lock.button("🔒 Restore Safe Scroll (Exit Zoom)", type="primary", help="Click this if the chart gets stuck in zoom mode"):
+            st.rerun()
+
         # 1. EQUITY CURVE
         st.subheader("Cumulative Net P&L")
         
