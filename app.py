@@ -369,6 +369,9 @@ else:
     st.divider()
 
     # --- CHARTS ---
+    # CONFIG: Show Toolbar, but Disable Scroll Zooming
+    CHART_CONFIG = {'displayModeBar': True, 'scrollZoom': False}
+
     tab_dashboard, tab_raw = st.tabs(["📊 Graphical Report", "📄 Raw Data"])
 
     with tab_dashboard:
@@ -419,14 +422,17 @@ else:
             fillcolor='rgba(211, 47, 47, 0.2)',
             name='Drawdown'
         ))
+        
+        # FIX: dragmode=False prevents accidental scroll-hijacking
         fig_equity.update_layout(
             margin=dict(l=0, r=0, t=10, b=0), 
             height=350,
             hovermode="x unified",
+            dragmode=False, # <--- The Magic Fix
             xaxis=dict(showgrid=False),
             yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
         )
-        st.plotly_chart(fig_equity, key="equity")
+        st.plotly_chart(fig_equity, key="equity", config=CHART_CONFIG)
         
         # 2. PERIOD P&L
         freq_choice = st.session_state['f_freq']
@@ -451,8 +457,8 @@ else:
             x=period_pnl['Datetime'], y=period_pnl['Net PnL'], 
             marker_color=period_pnl['Color']
         ))
-        fig_daily.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0))
-        st.plotly_chart(fig_daily, key="period_pnl")
+        fig_daily.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0), dragmode=False)
+        st.plotly_chart(fig_daily, key="period_pnl", config=CHART_CONFIG)
 
         st.markdown("<br>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
@@ -464,24 +470,24 @@ else:
                 hourly_pnl = df_filtered.groupby('Hour')['Net PnL'].sum().reset_index()
                 fig_hour = px.bar(hourly_pnl, x='Hour', y='Net PnL', color='Net PnL', 
                                   color_continuous_scale=['#D32F2F', '#FDD835', '#2E7D32']) 
-                fig_hour.update_layout(coloraxis_showscale=False, height=200, margin=dict(l=0,r=0,t=0,b=0))
-                st.plotly_chart(fig_hour, key="hour", width="stretch")
+                fig_hour.update_layout(coloraxis_showscale=False, height=200, margin=dict(l=0,r=0,t=0,b=0), dragmode=False)
+                st.plotly_chart(fig_hour, key="hour", width='stretch', config=CHART_CONFIG)
         with c2:
             with st.container(border=True):
                 st.markdown("**Fee Drain**")
                 metrics = pd.DataFrame({'Metric': ['Gross Profit', 'Trading Fees'], 'Value': [total_gross, total_fees]})
                 fig_fees = px.bar(metrics, x='Metric', y='Value', color='Metric', 
                                   color_discrete_map={'Gross Profit': '#2E7D32', 'Trading Fees': '#D32F2F'})
-                fig_fees.update_layout(showlegend=False, height=200, margin=dict(l=0,r=0,t=0,b=0))
-                st.plotly_chart(fig_fees, key="fees", width="stretch")
+                fig_fees.update_layout(showlegend=False, height=200, margin=dict(l=0,r=0,t=0,b=0), dragmode=False)
+                st.plotly_chart(fig_fees, key="fees", width='stretch', config=CHART_CONFIG)
         with c3:
             with st.container(border=True):
                 st.markdown("**Long vs. Short**")
                 side_pnl = df_filtered.groupby('Side')['Net PnL'].sum().reset_index()
                 fig_side = px.bar(side_pnl, y='Side', x='Net PnL', orientation='h', 
                                   color='Net PnL', color_continuous_scale=['#D32F2F', '#2E7D32'])
-                fig_side.update_layout(coloraxis_showscale=False, height=200, margin=dict(l=0,r=0,t=0,b=0))
-                st.plotly_chart(fig_side, key="side", width="stretch")
+                fig_side.update_layout(coloraxis_showscale=False, height=200, margin=dict(l=0,r=0,t=0,b=0), dragmode=False)
+                st.plotly_chart(fig_side, key="side", width='stretch', config=CHART_CONFIG)
 
     with tab_raw:
         def highlight_pnl(val):
