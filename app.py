@@ -447,9 +447,11 @@ else:
     
     st.divider()
 
+    # --- CHARTS ---
     tab_dashboard, tab_raw = st.tabs(["📊 Graphical Report", "📄 Raw Data"])
 
     with tab_dashboard:
+        # --- THE FIX: INTERACTION TOGGLE & KEY RESET ---
         enable_zoom = st.toggle("Enable Zooming & Interaction", value=False)
         
         if enable_zoom:
@@ -460,8 +462,10 @@ else:
             chart_config = {'displayModeBar': False, 'scrollZoom': False}
             drag_mode = False 
         
+        # We append the toggle state to the 'key' to force a full reset/re-render
         chart_key_suffix = f"_{enable_zoom}"
 
+        # 1. EQUITY CURVE
         st.subheader("Cumulative Net P&L")
         
         df_sorted = df_filtered.sort_values(by='Datetime')
@@ -519,6 +523,7 @@ else:
         )
         st.plotly_chart(fig_equity, key=f"equity{chart_key_suffix}", config=chart_config)
         
+        # 2. PERIOD P&L
         freq_choice = st.session_state['f_freq']
         st.subheader(f"{freq_choice} Net P&L")
         
