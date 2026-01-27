@@ -95,10 +95,21 @@ def save_to_master(new_df):
     else:
         old_df = pd.DataFrame()
 
+    # Ensure we deduplicate properly by converting keys to strings
+    for d in [old_df, new_df]:
+        if not d.empty and 'Order ID' in d.columns:
+            d['Order ID'] = d['Order ID'].astype(str)
+
     combined = pd.concat([old_df, new_df], ignore_index=True)
     
+    # Robust Deduplication (Composite Key + Order ID)
+    dedup_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 'Realised P&L(INR)']
+    existing_cols = [c for c in dedup_cols if c in combined.columns]
+    
+    if existing_cols:
+        combined = combined.drop_duplicates(subset=existing_cols, keep='last')
+    
     if 'Order ID' in combined.columns:
-        combined['Order ID'] = combined['Order ID'].astype(str)
         combined = combined.drop_duplicates(subset=['Order ID'], keep='last')
 
     combined.to_csv(MASTER_DB, index=False)
@@ -109,12 +120,14 @@ def save_to_master(new_df):
 
 def process_pnl_statement(df, filename):
     """Logic for the new P&L Statement format"""
-    
-    # 1. Account Name from Filename (Simple & Robust)
+    # 1. Account Name from Filename
     account_name = filename.split()[0]
             
-    # Clean & Transform
+    # Clean Dates
     df['dt'] = pd.to_datetime(df['Date & Time'], dayfirst=True, errors='coerce')
+    # Remove junk rows
+    df = df.dropna(subset=['dt']).copy()
+    
     df['Date'] = df['dt'].dt.date
     df['Time'] = df['dt'].dt.time.astype(str)
     
@@ -133,7 +146,6 @@ def process_pnl_statement(df, filename):
     df['P&L_USDT'] = pd.to_numeric(df['Notional Realised P&L (in USDT)'], errors='coerce')
     
     df['Realised P&L(INR)'] = df['P&L_INR_Raw']
-    # Fill missing INR values using USDT * Rate
     mask_pnl = df['Realised P&L(INR)'].isna()
     df.loc[mask_pnl, 'Realised P&L(INR)'] = df.loc[mask_pnl, 'P&L_USDT'] * df.loc[mask_pnl, 'Rate']
     df['Realised P&L(INR)'] = df['Realised P&L(INR)'].fillna(0)
@@ -158,8 +170,10 @@ def process_legacy_csv(df, filename):
     temp_dt = df['Time'].astype(str).str.split(' IST').str[0]
     temp_dt = pd.to_datetime(temp_dt, errors='coerce')
     
-    df['Date'] = temp_dt.dt.date
-    df['Time'] = temp_dt.dt.time.astype(str)
+    # Keep valid dates only
+    df = df[temp_dt.notna()].copy()
+    df['Date'] = temp_dt[temp_dt.notna()].dt.date
+    df['Time'] = temp_dt[temp_dt.notna()].dt.time.astype(str)
     
     fixed_conversion_rate = 85.0
     
@@ -174,12 +188,10 @@ def process_legacy_csv(df, filename):
     
     target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
                    'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
-    # Filter columns that actually exist
     available_cols = [c for c in target_cols if c in df.columns]
     return df[available_cols]
 
 def normalize_raw_data(file):
-    # 1. DETERMINE FILE TYPE
     is_excel = False
     if file.name.endswith(('.xlsx', '.xls')):
         is_excel = True
@@ -192,16 +204,11 @@ def normalize_raw_data(file):
             is_excel = True
             file.seek(0)
 
-    # 2. PROCESS BASED ON TYPE
     if is_excel:
         try:
-            # Peek for signature
             df_peek = pd.read_excel(file, header=None, nrows=5)
             file.seek(0)
-            
-            first_cell = str(df_peek.iloc[0, 0])
-            if "P&L Statement" in first_cell:
-                # Use New Logic
+            if not df_peek.empty and "P&L Statement" in str(df_peek.iloc[0, 0]):
                 df = pd.read_excel(file, skiprows=13)
                 return process_pnl_statement(df, file.name)
             else:
@@ -209,14 +216,11 @@ def normalize_raw_data(file):
                 return process_legacy_csv(df, file.name)
         except Exception:
             return pd.DataFrame()
-            
     else:
         try:
             first_line = file.readline().decode('utf-8')
             file.seek(0)
-            
             if "P&L Statement" in first_line:
-                # For CSV version of the P&L statement
                 df = pd.read_csv(file, skiprows=13)
                 return process_pnl_statement(df, file.name)
             else:
@@ -250,12 +254,10 @@ with st.sidebar:
             if new_data_list:
                 full_new_data = pd.concat(new_data_list)
                 _, success = save_to_master(full_new_data)
-                
                 if success:
-                    st.success("✅ Database Updated & Saved to Cloud!")
+                    st.success("✅ Database Updated!")
                 else:
-                    st.warning("⚠️ Saved locally, but Cloud Sync failed.")
-                
+                    st.warning("⚠️ Saved locally, Cloud Sync failed.")
                 st.rerun()
 
 # --- FILTER SECTION ---
@@ -282,6 +284,7 @@ if not df.empty:
     if 'f_side' not in st.session_state: st.session_state['f_side'] = all_sides
     if 'f_freq' not in st.session_state: st.session_state['f_freq'] = "Daily"
 
+    # Sanitize Session State
     curr_start, curr_end = st.session_state['f_date']
     valid_start = max(curr_start, min_d)
     valid_end = min(curr_end, max_d)
@@ -289,7 +292,6 @@ if not df.empty:
     st.session_state['f_date'] = (valid_start, valid_end)
 
     with st.expander("🛠️ Filter Options (Click to Expand)", expanded=False):
-        
         k1, k2 = st.columns([1, 4])
         with k1:
              if st.button("🔄 Reset All", use_container_width=True):
@@ -301,7 +303,6 @@ if not df.empty:
                 st.rerun()
         
         st.markdown("---") 
-        
         st.write("**Quick Date Ranges:**")
         today = datetime.date.today()
         
@@ -334,7 +335,6 @@ if not df.empty:
             st.rerun()
 
         st.markdown("---") 
-            
         c1, c2 = st.columns([1, 2])
         with c1:
             st.date_input("Custom Date Range", 
@@ -348,7 +348,6 @@ if not df.empty:
             st.multiselect("Side", all_sides, key='f_side')
 
     date_range = st.session_state['f_date']
-    
     if isinstance(date_range, tuple) and len(date_range) == 2:
         start_date, end_date = date_range
         mask = (
@@ -372,9 +371,13 @@ if df_filtered.empty:
     else:
         st.info("👋 No data found. Please run 'migrate.py' or upload files.")
 else:
-    raw_ts = df_filtered['Date'].astype(str) + ' ' + df_filtered['Time'].astype(str)
-    clean_ts = raw_ts.str.slice(0, 19)
-    df_filtered['Datetime'] = pd.to_datetime(clean_ts, format='%Y-%m-%d %H:%M:%S', errors='coerce')
+    # --- CHART PREP (THE FIX) ---
+    # Relaxed datetime parsing to handle both CSV and Excel sources
+    df_filtered['Datetime_Str'] = df_filtered['Date'].astype(str) + ' ' + df_filtered['Time'].astype(str)
+    df_filtered['Datetime'] = pd.to_datetime(df_filtered['Datetime_Str'], errors='coerce')
+    
+    # Drop rows ONLY if date parsing utterly failed (prevents empty charts)
+    df_filtered = df_filtered.dropna(subset=['Datetime']).copy()
     
     df_filtered['Net PnL'] = df_filtered['Realised P&L(INR)'] - df_filtered['Trading Fees(INR)']
     
@@ -387,19 +390,16 @@ else:
     total_net = df_filtered['Net PnL'].sum()
     total_gross = df_filtered['Realised P&L(INR)'].sum()
     total_fees = df_filtered['Trading Fees(INR)'].sum()
-    
     global_wins = df_filtered[df_filtered['Type'] == 'Win'].shape[0]
     global_losses = df_filtered[df_filtered['Type'] == 'Loss'].shape[0]
     global_total = global_wins + global_losses
     global_wr = (global_wins / global_total * 100) if global_total > 0 else 0
-    
     max_win = df_filtered['Net PnL'].max()
     max_loss = df_filtered['Net PnL'].min()
     if pd.isna(max_win): max_win = 0
     if pd.isna(max_loss): max_loss = 0
 
     st.markdown("### Global Performance")
-    
     net_color = "green" if total_net > 0 else ("red" if total_net < 0 else "normal")
     wr_color = "green" if global_wr >= 50 else "red"
     gr_color = "green" if total_gross > total_fees else ("red" if total_gross < total_fees else "normal")
@@ -413,24 +413,20 @@ else:
     m1, m2, m3, m4 = st.columns(4)
     with m1: custom_metric("Max Win", f"₹ {max_win:,.2f}", "green")
     with m2: custom_metric("Max Loss", f"₹ {max_loss:,.2f}", "red")
-    
+
     st.divider()
 
     st.markdown("### Account Breakdown")
     unique_accounts = sorted(df_filtered['Account'].unique())
-    
     if len(unique_accounts) > 0:
         cols = st.columns(len(unique_accounts))
         for i, acc in enumerate(unique_accounts):
             acc_data = df_filtered[df_filtered['Account'] == acc]
             acc_net = acc_data['Net PnL'].sum()
             acc_wins = acc_data[acc_data['Type'] == 'Win'].shape[0]
-            acc_losses = acc_data[acc_data['Type'] == 'Loss'].shape[0]
-            acc_total = acc_wins + acc_losses
+            acc_total = acc_wins + acc_data[acc_data['Type'] == 'Loss'].shape[0]
             acc_wr = (acc_wins / acc_total * 100) if acc_total > 0 else 0
-            
             acc_net_color = "green" if acc_net > 0 else ("red" if acc_net < 0 else "normal")
-            
             with cols[i]:
                 wr_class = "green-text" if acc_wr >= 50 else "red-text"
                 net_class = "green-text" if acc_net > 0 else ("red-text" if acc_net < 0 else "normal-text")
@@ -438,39 +434,29 @@ else:
                 <div class="metric-card">
                     <div class="metric-label">{acc} Win Rate and Net P&L</div>
                     <div class="metric-value {wr_class}">{acc_wr:.2f}%</div>
-                    <div style="font-size: 24px; font-weight: bold; margin-top:5px;" class="{net_class}">
-                        ₹ {acc_net:,.2f}
-                    </div>
-                </div>
-                """
+                    <div style="font-size: 24px; font-weight: bold; margin-top:5px;" class="{net_class}">₹ {acc_net:,.2f}</div>
+                </div>"""
                 st.markdown(html, unsafe_allow_html=True)
     
     st.divider()
 
-    # --- CHARTS ---
     tab_dashboard, tab_raw = st.tabs(["📊 Graphical Report", "📄 Raw Data"])
 
     with tab_dashboard:
-        # --- THE FIX: INTERACTION TOGGLE & KEY RESET ---
         enable_zoom = st.toggle("Enable Zooming & Interaction", value=False)
-        
         if enable_zoom:
             chart_config = {'displayModeBar': True, 'scrollZoom': True}
             drag_mode = "zoom" 
-            st.caption("✅ Zoom Enabled: You can pinch/drag charts. Toggle OFF to reset & lock.")
+            st.caption("✅ Zoom Enabled: Toggle OFF to reset & lock.")
         else:
             chart_config = {'displayModeBar': False, 'scrollZoom': False}
             drag_mode = False 
         
-        # We append the toggle state to the 'key' to force a full reset/re-render
         chart_key_suffix = f"_{enable_zoom}"
 
-        # 1. EQUITY CURVE
         st.subheader("Cumulative Net P&L")
-        
         df_sorted = df_filtered.sort_values(by='Datetime')
         df_sorted['Equity'] = df_sorted['Net PnL'].cumsum()
-        
         df_sorted = df_sorted.reset_index(drop=True)
         new_rows = []
         for i in range(1, len(df_sorted)):
@@ -480,8 +466,7 @@ else:
                 prev_time = df_sorted.loc[i-1, 'Datetime']
                 curr_time = df_sorted.loc[i, 'Datetime']
                 fraction = abs(prev_eq) / (abs(prev_eq) + abs(curr_eq))
-                time_diff = curr_time - prev_time
-                zero_time = prev_time + (time_diff * fraction)
+                zero_time = prev_time + (curr_time - prev_time) * fraction
                 zero_row = df_sorted.loc[i-1].copy()
                 zero_row['Datetime'] = zero_time
                 zero_row['Equity'] = 0
@@ -496,39 +481,16 @@ else:
         fig_equity = go.Figure()
         y_green = df_final['Equity'].copy()
         y_green[y_green < 0] = None 
-        fig_equity.add_trace(go.Scatter(
-            x=df_final['Datetime'], y=y_green,
-            fill='tozeroy', mode='lines', 
-            line=dict(color='#2E7D32', width=2),
-            fillcolor='rgba(46, 125, 50, 0.2)',
-            name='Profit'
-        ))
+        fig_equity.add_trace(go.Scatter(x=df_final['Datetime'], y=y_green, fill='tozeroy', mode='lines', line=dict(color='#2E7D32', width=2), fillcolor='rgba(46, 125, 50, 0.2)', name='Profit'))
         y_red = df_final['Equity'].copy()
         y_red[y_red > 0] = None
-        fig_equity.add_trace(go.Scatter(
-            x=df_final['Datetime'], y=y_red,
-            fill='tozeroy', mode='lines', 
-            line=dict(color='#D32F2F', width=2),
-            fillcolor='rgba(211, 47, 47, 0.2)',
-            name='Drawdown'
-        ))
-        
-        fig_equity.update_layout(
-            margin=dict(l=0, r=0, t=10, b=0), 
-            height=350,
-            hovermode="x unified",
-            dragmode=drag_mode,
-            xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)')
-        )
+        fig_equity.add_trace(go.Scatter(x=df_final['Datetime'], y=y_red, fill='tozeroy', mode='lines', line=dict(color='#D32F2F', width=2), fillcolor='rgba(211, 47, 47, 0.2)', name='Drawdown'))
+        fig_equity.update_layout(margin=dict(l=0, r=0, t=10, b=0), height=350, hovermode="x unified", dragmode=drag_mode, xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.2)'))
         st.plotly_chart(fig_equity, key=f"equity{chart_key_suffix}", config=chart_config)
         
-        # 2. PERIOD P&L
         freq_choice = st.session_state['f_freq']
         st.subheader(f"{freq_choice} Net P&L")
-        
         df_period = df_filtered.copy()
-        
         if freq_choice == "Weekly":
             period_pnl = df_period.groupby(pd.Grouper(key='Datetime', freq='W-MON'))['Net PnL'].sum().reset_index()
         elif freq_choice == "Monthly":
@@ -540,12 +502,8 @@ else:
             period_pnl.rename(columns={'Date': 'Datetime'}, inplace=True)
 
         period_pnl['Color'] = period_pnl['Net PnL'].apply(lambda x: '#2E7D32' if x >= 0 else '#D32F2F')
-        
         fig_daily = go.Figure()
-        fig_daily.add_trace(go.Bar(
-            x=period_pnl['Datetime'], y=period_pnl['Net PnL'], 
-            marker_color=period_pnl['Color']
-        ))
+        fig_daily.add_trace(go.Bar(x=period_pnl['Datetime'], y=period_pnl['Net PnL'], marker_color=period_pnl['Color']))
         fig_daily.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0), dragmode=drag_mode)
         st.plotly_chart(fig_daily, key=f"period_pnl{chart_key_suffix}", config=chart_config)
 
@@ -557,41 +515,28 @@ else:
                 df_filtered['HourStr'] = df_filtered['Time'].astype(str).str.split(':').str[0]
                 df_filtered['Hour'] = pd.to_numeric(df_filtered['HourStr'], errors='coerce')
                 hourly_pnl = df_filtered.groupby('Hour')['Net PnL'].sum().reset_index()
-                fig_hour = px.bar(hourly_pnl, x='Hour', y='Net PnL', color='Net PnL', 
-                                  color_continuous_scale=['#D32F2F', '#FDD835', '#2E7D32']) 
+                fig_hour = px.bar(hourly_pnl, x='Hour', y='Net PnL', color='Net PnL', color_continuous_scale=['#D32F2F', '#FDD835', '#2E7D32']) 
                 fig_hour.update_layout(coloraxis_showscale=False, height=200, margin=dict(l=0,r=0,t=0,b=0), dragmode=drag_mode)
                 st.plotly_chart(fig_hour, key=f"hour{chart_key_suffix}", width='stretch', config=chart_config)
         with c2:
             with st.container(border=True):
                 st.markdown("**Fee Drain**")
                 metrics = pd.DataFrame({'Metric': ['Gross Profit', 'Trading Fees'], 'Value': [total_gross, total_fees]})
-                fig_fees = px.bar(metrics, x='Metric', y='Value', color='Metric', 
-                                  color_discrete_map={'Gross Profit': '#2E7D32', 'Trading Fees': '#D32F2F'})
+                fig_fees = px.bar(metrics, x='Metric', y='Value', color='Metric', color_discrete_map={'Gross Profit': '#2E7D32', 'Trading Fees': '#D32F2F'})
                 fig_fees.update_layout(showlegend=False, height=200, margin=dict(l=0,r=0,t=0,b=0), dragmode=drag_mode)
                 st.plotly_chart(fig_fees, key=f"fees{chart_key_suffix}", width='stretch', config=chart_config)
         with c3:
             with st.container(border=True):
                 st.markdown("**Long vs. Short**")
                 side_pnl = df_filtered.groupby('Side')['Net PnL'].sum().reset_index()
-                fig_side = px.bar(side_pnl, y='Side', x='Net PnL', orientation='h', 
-                                  color='Net PnL', color_continuous_scale=['#D32F2F', '#2E7D32'])
+                fig_side = px.bar(side_pnl, y='Side', x='Net PnL', orientation='h', color='Net PnL', color_continuous_scale=['#D32F2F', '#2E7D32'])
                 fig_side.update_layout(coloraxis_showscale=False, height=200, margin=dict(l=0,r=0,t=0,b=0), dragmode=drag_mode)
                 st.plotly_chart(fig_side, key=f"side{chart_key_suffix}", width='stretch', config=chart_config)
 
     with tab_raw:
         def highlight_pnl(val):
-            if val > 0: return 'color: #2ca02c; font-weight: bold'
-            elif val < 0: return 'color: #d62728; font-weight: bold'
-            else: return 'font-weight: bold'
-        
+            return 'color: #2ca02c; font-weight: bold' if val > 0 else ('color: #d62728; font-weight: bold' if val < 0 else 'font-weight: bold')
         def highlight_type(val):
-            if val == 'Win': return 'color: #2ca02c; font-weight: bold'
-            elif val == 'Loss': return 'color: #d62728; font-weight: bold'
-            else: return 'font-weight: bold'
-        styled_df = df_filtered.style.format({
-            'Realised P&L(INR)': '₹ {:,.2f}',
-            'Trading Fees(INR)': '₹ {:,.2f}',
-            'Net PnL': '₹ {:,.2f}'
-        }).map(highlight_pnl, subset=['Realised P&L(INR)', 'Net PnL'])\
-          .map(highlight_type, subset=['Type'])
+            return 'color: #2ca02c; font-weight: bold' if val == 'Win' else ('color: #d62728; font-weight: bold' if val == 'Loss' else 'font-weight: bold')
+        styled_df = df_filtered.style.format({'Realised P&L(INR)': '₹ {:,.2f}', 'Trading Fees(INR)': '₹ {:,.2f}', 'Net PnL': '₹ {:,.2f}'}).map(highlight_pnl, subset=['Realised P&L(INR)', 'Net PnL']).map(highlight_type, subset=['Type'])
         st.dataframe(styled_df, width="stretch", height=600)
