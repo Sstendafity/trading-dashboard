@@ -1,4 +1,4 @@
-import streamlit as st
+aimport streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
@@ -110,33 +110,93 @@ def save_to_master(new_df):
     return combined, success
 
 def normalize_raw_data(file):
-    df_raw = pd.read_csv(file)
-    filename = file.name
-    account_name = filename.split()[0]
-    
-    if 'Status' in df_raw.columns:
-        df_raw = df_raw[df_raw['Status'] == 'closed'].copy()
-    
-    temp_dt = df_raw['Time'].astype(str).str.split(' IST').str[0]
-    temp_dt = pd.to_datetime(temp_dt, errors='coerce')
-    
-    df_raw['Date'] = temp_dt.dt.date
-    df_raw['Time'] = temp_dt.dt.time.astype(str)
-    
-    conversion_rate = 85.0
-    if 'Realised P&L' in df_raw.columns:
-        df_raw['Realised P&L(INR)'] = df_raw['Realised P&L'] * conversion_rate
-        df_raw['Trading Fees(INR)'] = df_raw['Trading Fees'] * conversion_rate
+    # 1. PEEK AT THE FILE TO DETECT FORMAT
+    try:
+        first_line = file.readline().decode('utf-8')
+        file.seek(0) # Reset pointer to start
+    except:
+        return pd.DataFrame()
+
+    # --- FORMAT A: NEW P&L STATEMENT (Excel/CSV Export) ---
+    if "P&L Statement" in first_line:
+        try:
+            # Skip metadata rows (first 13 lines usually)
+            df = pd.read_csv(file, skiprows=13)
+        except:
+            return pd.DataFrame()
         
-    df_raw['Account'] = account_name
-    
-    if 'Order ID' in df_raw.columns:
-        df_raw['Order ID'] = df_raw['Order ID'].astype(str)
-    
-    target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
-                   'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
-    available_cols = [c for c in target_cols if c in df_raw.columns]
-    return df_raw[available_cols]
+        # Clean & Transform
+        df['dt'] = pd.to_datetime(df['Date & Time'], dayfirst=True, errors='coerce')
+        df['Date'] = df['dt'].dt.date
+        df['Time'] = df['dt'].dt.time.astype(str)
+        
+        df['Order ID'] = df['Trade ID'].astype(str)
+        df['Contract'] = df['Symbol']
+        df['Side'] = df['Side'].str.lower()
+        
+        # --- DYNAMIC CONVERSION RATE LOGIC ---
+        # 1. Try to read rate from column, default to 1.0 if missing (so we can see errors if any)
+        if 'USDT-INR Rate' in df.columns:
+            df['Rate'] = pd.to_numeric(df['USDT-INR Rate'], errors='coerce').fillna(0)
+        else:
+            df['Rate'] = 0 # Fallback 
+
+        # 2. Financials: Prefer "Actual INR" column. If missing/0, calculate using (Notional USDT * Rate)
+        
+        # P&L
+        df['P&L_INR_Raw'] = pd.to_numeric(df['Actual Realised P&L (in INR)'], errors='coerce')
+        df['P&L_USDT'] = pd.to_numeric(df['Notional Realised P&L (in USDT)'], errors='coerce')
+        
+        df['Realised P&L(INR)'] = df['P&L_INR_Raw']
+        # Fill missing INR values using USDT * Rate
+        mask_pnl = df['Realised P&L(INR)'].isna()
+        df.loc[mask_pnl, 'Realised P&L(INR)'] = df.loc[mask_pnl, 'P&L_USDT'] * df.loc[mask_pnl, 'Rate']
+        df['Realised P&L(INR)'] = df['Realised P&L(INR)'].fillna(0)
+
+        # Fees
+        fee_inr = pd.to_numeric(df['Actual Trading Fee (in INR)'], errors='coerce').fillna(0)
+        gst_inr = pd.to_numeric(df['GST(18%)'], errors='coerce').fillna(0)
+        df['Trading Fees(INR)'] = fee_inr + gst_inr
+        
+        df['Status'] = 'closed'
+        df['Account'] = file.name.split()[0] # Extract from filename
+        
+        target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
+                       'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
+        
+        return df[target_cols]
+
+    # --- FORMAT B: LEGACY CSV (Original Format) ---
+    else:
+        df_raw = pd.read_csv(file)
+        filename = file.name
+        account_name = filename.split()[0]
+        
+        if 'Status' in df_raw.columns:
+            df_raw = df_raw[df_raw['Status'] == 'closed'].copy()
+        
+        temp_dt = df_raw['Time'].astype(str).str.split(' IST').str[0]
+        temp_dt = pd.to_datetime(temp_dt, errors='coerce')
+        
+        df_raw['Date'] = temp_dt.dt.date
+        df_raw['Time'] = temp_dt.dt.time.astype(str)
+        
+        # This fixed rate ONLY applies to the legacy format
+        fixed_conversion_rate = 85.0
+        
+        if 'Realised P&L' in df_raw.columns:
+            df_raw['Realised P&L(INR)'] = df_raw['Realised P&L'] * fixed_conversion_rate
+            df_raw['Trading Fees(INR)'] = df_raw['Trading Fees'] * fixed_conversion_rate
+            
+        df_raw['Account'] = account_name
+        
+        if 'Order ID' in df_raw.columns:
+            df_raw['Order ID'] = df_raw['Order ID'].astype(str)
+        
+        target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
+                       'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
+        available_cols = [c for c in target_cols if c in df_raw.columns]
+        return df_raw[available_cols]
 
 # ==========================================
 # 2. UI & LAYOUT
