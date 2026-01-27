@@ -372,16 +372,20 @@ if df_filtered.empty:
     else:
         st.info("👋 No data found. Please run 'migrate.py' or upload files.")
 else:
-    raw_ts = df_filtered['Date'].astype(str) + ' ' + df_filtered['Time'].astype(str)
-    clean_ts = raw_ts.str.slice(0, 19)
-    df_filtered['Datetime'] = pd.to_datetime(clean_ts, format='%Y-%m-%d %H:%M:%S', errors='coerce')
+    # --- CHART PREP (THE FIX) ---
+    # Relaxed datetime parsing to handle both CSV and Excel sources
+    df_filtered['Datetime_Str'] = df_filtered['Date'].astype(str) + ' ' + df_filtered['Time'].astype(str)
+    df_filtered['Datetime'] = pd.to_datetime(df_filtered['Datetime_Str'], errors='coerce')
     
+    # Drop rows ONLY if date parsing utterly failed (prevents empty charts)
+    df_filtered = df_filtered.dropna(subset=['Datetime']).copy()
+
     df_filtered['Net PnL'] = df_filtered['Realised P&L(INR)'] - df_filtered['Trading Fees(INR)']
     
     def get_type(row):
         if row['Realised P&L(INR)'] > 0: return 'Win'
         elif row['Realised P&L(INR)'] < 0: return 'Loss'
-        return 'Breakeven'
+        return 'Order Fee'
     df_filtered['Type'] = df_filtered.apply(get_type, axis=1)
 
     total_net = df_filtered['Net PnL'].sum()
