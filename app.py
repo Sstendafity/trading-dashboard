@@ -12,7 +12,7 @@ MASTER_DB = "trade_history.csv"
 
 # --- CONFIGURATION FOR GITHUB ---
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"] if "GITHUB_TOKEN" in st.secrets else None
-REPO_NAME = "Sstendafity/trading-dashboard"  # <--- REMEMBER TO CHANGE THIS
+REPO_NAME = "Sstendafity/trading-dashboard" 
 
 # --- CUSTOM CSS ---
 st.markdown("""
@@ -37,8 +37,6 @@ st.markdown("""
     .green-text { color: #2ca02c; }
     .red-text { color: #d62728; }
     .normal-text { color: #333; }
-    
-    /* Make buttons smaller for shortcuts */
     div.stButton > button:first-child {
         height: 2em;
         padding-top: 0px;
@@ -109,8 +107,43 @@ def save_to_master(new_df):
     
     return combined, success
 
-def process_pnl_statement(df, filename):
+def process_pnl_statement(df, filename, raw_file_obj=None):
     """Logic for the new P&L Statement format"""
+    
+    # 1. Try to extract 'Client Account ID' from the file content if possible
+    # We passed the already-read df (skiprows=13), so we can't see the header rows in 'df'.
+    # We need to peek at the raw file again or rely on the filename.
+    account_name = filename.split()[0] # Default Fallback
+    
+    if raw_file_obj:
+        try:
+            raw_file_obj.seek(0)
+            # Read first few lines to find "Client Account ID"
+            # Works for Excel via pandas header read
+            if filename.endswith(('.xlsx', '.xls')):
+                meta = pd.read_excel(raw_file_obj, header=None, nrows=10)
+            else:
+                meta = pd.read_csv(raw_file_obj, header=None, nrows=10)
+            
+            # Search for the ID in the metadata dataframe
+            # It usually looks like a cell with "Client Account ID:" and next cell has value
+            for i in range(len(meta)):
+                row_str = meta.iloc[i].astype(str).values
+                for j, cell in enumerate(row_str):
+                    if "Client Account ID" in cell:
+                        # Found label, check neighbors for value
+                        # Try next column
+                        if j+1 < len(row_str) and row_str[j+1] != 'nan':
+                            account_name = str(row_str[j+1]).strip()
+                        # Try parsing "Client Account ID: 424499" in same cell
+                        elif ":" in cell:
+                            parts = cell.split(":")
+                            if len(parts) > 1 and parts[1].strip():
+                                account_name = parts[1].strip()
+        except:
+            pass # Keep default
+            
+    # Clean & Transform
     df['dt'] = pd.to_datetime(df['Date & Time'], dayfirst=True, errors='coerce')
     df['Date'] = df['dt'].dt.date
     df['Time'] = df['dt'].dt.time.astype(str)
@@ -141,7 +174,7 @@ def process_pnl_statement(df, filename):
     df['Trading Fees(INR)'] = fee_inr + gst_inr
     
     df['Status'] = 'closed'
-    df['Account'] = filename.split()[0]
+    df['Account'] = account_name
     
     target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
                    'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
@@ -181,7 +214,6 @@ def normalize_raw_data(file):
     if file.name.endswith(('.xlsx', '.xls')):
         is_excel = True
     else:
-        # Check signature if extension is confusing (like .csv but actually binary)
         try:
             file.seek(0)
             file.readline().decode('utf-8')
@@ -193,35 +225,31 @@ def normalize_raw_data(file):
     # 2. PROCESS BASED ON TYPE
     if is_excel:
         try:
-            # Peek at the Excel file to see if it has the "P&L Statement" header
-            # We assume first sheet
+            # Peek for signature
             df_peek = pd.read_excel(file, header=None, nrows=5)
             file.seek(0)
             
             first_cell = str(df_peek.iloc[0, 0])
             if "P&L Statement" in first_cell:
-                # It's an Excel file WITH the P&L structure -> Use New Logic
+                # Use New Logic, pass 'file' to extract Account ID from metadata
                 df = pd.read_excel(file, skiprows=13)
-                return process_pnl_statement(df, file.name)
+                return process_pnl_statement(df, file.name, raw_file_obj=file)
             else:
-                # It's an Excel file WITHOUT P&L structure -> Use Legacy Logic
                 df = pd.read_excel(file)
                 return process_legacy_csv(df, file.name)
         except Exception:
             return pd.DataFrame()
             
     else:
-        # It's a CSV text file
         try:
             first_line = file.readline().decode('utf-8')
             file.seek(0)
             
             if "P&L Statement" in first_line:
-                # New Logic
+                # For CSV version of the P&L statement
                 df = pd.read_csv(file, skiprows=13)
-                return process_pnl_statement(df, file.name)
+                return process_pnl_statement(df, file.name, raw_file_obj=file)
             else:
-                # Legacy Logic
                 df = pd.read_csv(file)
                 return process_legacy_csv(df, file.name)
         except Exception:
@@ -245,7 +273,8 @@ with st.sidebar:
             for f in uploaded_files:
                 try:
                     clean_df = normalize_raw_data(f)
-                    new_data_list.append(clean_df)
+                    if not clean_df.empty:
+                        new_data_list.append(clean_df)
                 except Exception as e:
                     st.error(f"Error reading {f.name}: {e}")
             if new_data_list:
@@ -265,12 +294,12 @@ df_filtered = pd.DataFrame()
 if not df.empty:
     df['Date'] = pd.to_datetime(df['Date'])
     
-    # --- FIX: SAFE BOUNDARIES ---
-    # 1. min_d is the earliest data point
-    min_d = df['Date'].min().date()
-    # 2. max_d is EITHER the latest data OR Today (whichever is later)
-    # This prevents the "Today > Max" error
-    max_d = max(df['Date'].max().date(), datetime.date.today())
+    if df['Date'].notna().any():
+        min_d = df['Date'].min().date()
+        max_d = max(df['Date'].max().date(), datetime.date.today()) 
+    else:
+        min_d = datetime.date.today()
+        max_d = datetime.date.today()
     
     all_accounts = df['Account'].unique().tolist()
     all_contracts = df['Contract'].unique().tolist()
@@ -282,6 +311,12 @@ if not df.empty:
     if 'f_con' not in st.session_state: st.session_state['f_con'] = all_contracts
     if 'f_side' not in st.session_state: st.session_state['f_side'] = all_sides
     if 'f_freq' not in st.session_state: st.session_state['f_freq'] = "Daily"
+
+    curr_start, curr_end = st.session_state['f_date']
+    valid_start = max(curr_start, min_d)
+    valid_end = min(curr_end, max_d)
+    if valid_start > valid_end: valid_start = valid_end
+    st.session_state['f_date'] = (valid_start, valid_end)
 
     with st.expander("🛠️ Filter Options (Click to Expand)", expanded=False):
         
@@ -300,60 +335,48 @@ if not df.empty:
         st.write("**Quick Date Ranges:**")
         today = datetime.date.today()
         
-        # --- SAFE DATE SETTER FUNCTION ---
         def set_date_range(start, end):
-            # Clamp Start: Cannot be earlier than min_d
             safe_start = max(start, min_d)
-            # Clamp End: Cannot be later than max_d
             safe_end = min(end, max_d)
-            # Ensure Start isn't after End (rare edge case)
             if safe_start > safe_end: safe_start = safe_end
-            
             st.session_state['f_date'] = (safe_start, safe_end)
             st.rerun()
 
-        # Row 1
         r1_col1, r1_col2, r1_col3 = st.columns(3)
         if r1_col1.button("📅 Today", use_container_width=True):
             set_date_range(today, today)
-            
         if r1_col2.button("⏪ Yesterday", use_container_width=True):
             yesterday = today - datetime.timedelta(days=1)
             set_date_range(yesterday, yesterday)
-            
         if r1_col3.button("📆 This Week", use_container_width=True):
             start = today - datetime.timedelta(days=today.weekday())
             set_date_range(start, today)
             
-        # Row 2
         r2_col1, r2_col2, r2_col3 = st.columns(3)
         if r2_col1.button("🗓️ This Month", use_container_width=True):
             start = today.replace(day=1)
             set_date_range(start, today)
-            
         if r2_col2.button("📅 This Year", use_container_width=True):
             start = today.replace(month=1, day=1)
             set_date_range(start, today)
-            
         if r2_col3.button("∞ All Time", use_container_width=True):
-            set_date_range(min_d, max_d)
+            st.session_state['f_date'] = (min_d, max_d)
+            st.rerun()
 
         st.markdown("---") 
             
         c1, c2 = st.columns([1, 2])
-        
         with c1:
             st.date_input("Custom Date Range", 
+                          value=st.session_state['f_date'],
                           min_value=min_d, max_value=max_d,
                           key='f_date') 
             st.selectbox("Timeframe Aggregation", timeframes, key='f_freq')
-        
         with c2:
             st.multiselect("Account", all_accounts, key='f_acc')
             st.multiselect("Contract", all_contracts, key='f_con')
             st.multiselect("Side", all_sides, key='f_side')
 
-    # Apply Logic
     date_range = st.session_state['f_date']
     
     if isinstance(date_range, tuple) and len(date_range) == 2:
@@ -379,7 +402,6 @@ if df_filtered.empty:
     else:
         st.info("👋 No data found. Please run 'migrate.py' or upload files.")
 else:
-    # --- PRE-CALCULATE DATETIME ---
     raw_ts = df_filtered['Date'].astype(str) + ' ' + df_filtered['Time'].astype(str)
     clean_ts = raw_ts.str.slice(0, 19)
     df_filtered['Datetime'] = pd.to_datetime(clean_ts, format='%Y-%m-%d %H:%M:%S', errors='coerce')
@@ -389,10 +411,9 @@ else:
     def get_type(row):
         if row['Realised P&L(INR)'] > 0: return 'Win'
         elif row['Realised P&L(INR)'] < 0: return 'Loss'
-        return 'Order Fee'
+        return 'Breakeven'
     df_filtered['Type'] = df_filtered.apply(get_type, axis=1)
 
-    # --- ROW 1: GLOBAL SCORECARD ---
     total_net = df_filtered['Net PnL'].sum()
     total_gross = df_filtered['Realised P&L(INR)'].sum()
     total_fees = df_filtered['Trading Fees(INR)'].sum()
@@ -425,7 +446,6 @@ else:
     
     st.divider()
 
-    # --- ROW 3: ACCOUNT BREAKDOWN ---
     st.markdown("### Account Breakdown")
     unique_accounts = sorted(df_filtered['Account'].unique())
     
@@ -457,11 +477,9 @@ else:
     
     st.divider()
 
-    # --- CHARTS ---
     tab_dashboard, tab_raw = st.tabs(["📊 Graphical Report", "📄 Raw Data"])
 
     with tab_dashboard:
-        # --- THE FIX: INTERACTION TOGGLE & KEY RESET ---
         enable_zoom = st.toggle("Enable Zooming & Interaction", value=False)
         
         if enable_zoom:
@@ -472,10 +490,8 @@ else:
             chart_config = {'displayModeBar': False, 'scrollZoom': False}
             drag_mode = False 
         
-        # We append the toggle state to the 'key' to force a full reset/re-render
         chart_key_suffix = f"_{enable_zoom}"
 
-        # 1. EQUITY CURVE
         st.subheader("Cumulative Net P&L")
         
         df_sorted = df_filtered.sort_values(by='Datetime')
@@ -533,7 +549,6 @@ else:
         )
         st.plotly_chart(fig_equity, key=f"equity{chart_key_suffix}", config=chart_config)
         
-        # 2. PERIOD P&L
         freq_choice = st.session_state['f_freq']
         st.subheader(f"{freq_choice} Net P&L")
         
