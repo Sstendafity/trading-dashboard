@@ -111,7 +111,6 @@ def save_to_master(new_df):
 
 def process_pnl_statement(df, filename):
     """Logic for the new P&L Statement format"""
-    # Clean & Transform
     df['dt'] = pd.to_datetime(df['Date & Time'], dayfirst=True, errors='coerce')
     df['Date'] = df['dt'].dt.date
     df['Time'] = df['dt'].dt.time.astype(str)
@@ -177,12 +176,12 @@ def process_legacy_csv(df, filename):
     return df[available_cols]
 
 def normalize_raw_data(file):
-    # 1. DETERMINE FILE TYPE SAFELY
+    # 1. DETERMINE FILE TYPE
     is_excel = False
     if file.name.endswith(('.xlsx', '.xls')):
         is_excel = True
     else:
-        # Check if it's actually binary despite extension
+        # Check signature if extension is confusing (like .csv but actually binary)
         try:
             file.seek(0)
             file.readline().decode('utf-8')
@@ -191,45 +190,42 @@ def normalize_raw_data(file):
             is_excel = True
             file.seek(0)
 
-    # 2. LOAD DATA
-    df_raw = pd.DataFrame()
-    is_pnl_statement = False
-
+    # 2. PROCESS BASED ON TYPE
     if is_excel:
         try:
-            # First, read header only to check format without loading whole file
+            # Peek at the Excel file to see if it has the "P&L Statement" header
+            # We assume first sheet
             df_peek = pd.read_excel(file, header=None, nrows=5)
             file.seek(0)
             
-            # Check for P&L Statement signature
-            if not df_peek.empty and "P&L Statement" in str(df_peek.iloc[0,0]):
-                is_pnl_statement = True
-                df_raw = pd.read_excel(file, skiprows=13)
+            first_cell = str(df_peek.iloc[0, 0])
+            if "P&L Statement" in first_cell:
+                # It's an Excel file WITH the P&L structure -> Use New Logic
+                df = pd.read_excel(file, skiprows=13)
+                return process_pnl_statement(df, file.name)
             else:
-                df_raw = pd.read_excel(file)
+                # It's an Excel file WITHOUT P&L structure -> Use Legacy Logic
+                df = pd.read_excel(file)
+                return process_legacy_csv(df, file.name)
         except Exception:
             return pd.DataFrame()
+            
     else:
         # It's a CSV text file
         try:
             first_line = file.readline().decode('utf-8')
             file.seek(0)
+            
             if "P&L Statement" in first_line:
-                is_pnl_statement = True
-                df_raw = pd.read_csv(file, skiprows=13)
+                # New Logic
+                df = pd.read_csv(file, skiprows=13)
+                return process_pnl_statement(df, file.name)
             else:
-                df_raw = pd.read_csv(file)
+                # Legacy Logic
+                df = pd.read_csv(file)
+                return process_legacy_csv(df, file.name)
         except Exception:
             return pd.DataFrame()
-
-    # 3. ROUTE TO PROCESSOR
-    if df_raw.empty:
-        return pd.DataFrame()
-
-    if is_pnl_statement:
-        return process_pnl_statement(df_raw, file.name)
-    else:
-        return process_legacy_csv(df_raw, file.name)
 
 # ==========================================
 # 2. UI & LAYOUT
