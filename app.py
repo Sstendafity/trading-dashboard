@@ -378,7 +378,7 @@ else:
     df_filtered['Datetime'] = pd.to_datetime(df_filtered['Datetime_Str'], errors='coerce')
     
     # Drop rows ONLY if date parsing utterly failed (prevents empty charts)
-    df_filtered = df_filtered.dropna(subset=['Datetime']).copy()
+    #df_filtered = df_filtered.dropna(subset=['Datetime']).copy()
 
     df_filtered['Net PnL'] = df_filtered['Realised P&L(INR)'] - df_filtered['Trading Fees(INR)']
     
