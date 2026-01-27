@@ -107,41 +107,11 @@ def save_to_master(new_df):
     
     return combined, success
 
-def process_pnl_statement(df, filename, raw_file_obj=None):
+def process_pnl_statement(df, filename):
     """Logic for the new P&L Statement format"""
     
-    # 1. Try to extract 'Client Account ID' from the file content if possible
-    # We passed the already-read df (skiprows=13), so we can't see the header rows in 'df'.
-    # We need to peek at the raw file again or rely on the filename.
-    account_name = filename.split()[0] # Default Fallback
-    
-    if raw_file_obj:
-        try:
-            raw_file_obj.seek(0)
-            # Read first few lines to find "Client Account ID"
-            # Works for Excel via pandas header read
-            if filename.endswith(('.xlsx', '.xls')):
-                meta = pd.read_excel(raw_file_obj, header=None, nrows=10)
-            else:
-                meta = pd.read_csv(raw_file_obj, header=None, nrows=10)
-            
-            # Search for the ID in the metadata dataframe
-            # It usually looks like a cell with "Client Account ID:" and next cell has value
-            for i in range(len(meta)):
-                row_str = meta.iloc[i].astype(str).values
-                for j, cell in enumerate(row_str):
-                    if "Client Account ID" in cell:
-                        # Found label, check neighbors for value
-                        # Try next column
-                        if j+1 < len(row_str) and row_str[j+1] != 'nan':
-                            account_name = str(row_str[j+1]).strip()
-                        # Try parsing "Client Account ID: 424499" in same cell
-                        elif ":" in cell:
-                            parts = cell.split(":")
-                            if len(parts) > 1 and parts[1].strip():
-                                account_name = parts[1].strip()
-        except:
-            pass # Keep default
+    # 1. Account Name from Filename (Simple & Robust)
+    account_name = filename.split()[0]
             
     # Clean & Transform
     df['dt'] = pd.to_datetime(df['Date & Time'], dayfirst=True, errors='coerce')
@@ -231,9 +201,9 @@ def normalize_raw_data(file):
             
             first_cell = str(df_peek.iloc[0, 0])
             if "P&L Statement" in first_cell:
-                # Use New Logic, pass 'file' to extract Account ID from metadata
+                # Use New Logic
                 df = pd.read_excel(file, skiprows=13)
-                return process_pnl_statement(df, file.name, raw_file_obj=file)
+                return process_pnl_statement(df, file.name)
             else:
                 df = pd.read_excel(file)
                 return process_legacy_csv(df, file.name)
@@ -248,7 +218,7 @@ def normalize_raw_data(file):
             if "P&L Statement" in first_line:
                 # For CSV version of the P&L statement
                 df = pd.read_csv(file, skiprows=13)
-                return process_pnl_statement(df, file.name, raw_file_obj=file)
+                return process_pnl_statement(df, file.name)
             else:
                 df = pd.read_csv(file)
                 return process_legacy_csv(df, file.name)
