@@ -274,21 +274,29 @@ if not df.empty:
         min_d = datetime.date.today()
         max_d = datetime.date.today()
     
+    # --- CHANGE: Define Unlocked Calendar Range ---
+    # This allows the UI to go back to 2024, even if your data starts in 2025
+    calendar_min = datetime.date(2024, 1, 1) 
+    calendar_max = max_d
+
     all_accounts = df['Account'].unique().tolist()
     all_contracts = df['Contract'].unique().tolist()
     all_sides = df['Side'].unique().tolist()
     timeframes = ["Daily", "Weekly", "Monthly", "Yearly"]
 
-    if 'f_date' not in st.session_state: st.session_state['f_date'] = (min_d, max_d)
+    if 'f_date' not in st.session_state: st.session_state['f_date'] = (min_d, max_d) # Default: All Time Data
     if 'f_acc' not in st.session_state: st.session_state['f_acc'] = all_accounts
     if 'f_con' not in st.session_state: st.session_state['f_con'] = all_contracts
     if 'f_side' not in st.session_state: st.session_state['f_side'] = all_sides
     if 'f_freq' not in st.session_state: st.session_state['f_freq'] = "Daily"
 
-    if isinstance(st.session_state['f_date'], tuple) and len(st.session_state['f_date']) == 2:
-        curr_start, curr_end = st.session_state['f_date']
-        valid_start = max(curr_start, min_d)
-        valid_end = min(curr_end, max_d)
+    # --- CHANGE: Sanitize using CALENDAR limits, not DATA limits ---
+    current_val = st.session_state['f_date']
+    if isinstance(current_val, tuple) and len(current_val) == 2:
+        start_val, end_val = current_val
+        # Prevent crash by ensuring values are within the UI limits
+        valid_start = max(start_val, calendar_min)
+        valid_end = min(end_val, calendar_max)
         if valid_start > valid_end: valid_start = valid_end
         st.session_state['f_date'] = (valid_start, valid_end)
 
@@ -309,9 +317,10 @@ if not df.empty:
         st.write("**Quick Date Ranges:**")
         today = datetime.date.today()
         
+        # Update this function to use calendar_min
         def set_date_range(start, end):
-            safe_start = max(start, min_d)
-            safe_end = min(end, max_d)
+            safe_start = max(start, calendar_min) # <--- Changed from min_d
+            safe_end = min(end, calendar_max)
             if safe_start > safe_end: safe_start = safe_end
             st.session_state['f_date'] = (safe_start, safe_end)
             st.rerun()
@@ -343,7 +352,8 @@ if not df.empty:
         with c1:
             st.date_input("Custom Date Range", 
                           value=st.session_state['f_date'],
-                          min_value=min_d, max_value=max_d,
+                          min_value=calendar_min, # <--- Changed from min_d
+                          max_value=calendar_max, 
                           key='f_date') 
             st.selectbox("Timeframe Aggregation", timeframes, key='f_freq')
         with c2:
