@@ -351,8 +351,8 @@ if not df.empty:
         c1, c2 = st.columns([1, 2])
         with c1:
             # --- FIX: SPLIT START & END DATE WIDGETS ---
-            # Unpack the current values
-            curr_start, curr_end = final_val
+            # Unpack the current values DIRECTLY from session state
+            curr_start, curr_end = st.session_state['f_date']
             
             # Create two small columns side-by-side
             d_col1, d_col2 = st.columns(2)
