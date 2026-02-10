@@ -285,11 +285,12 @@ if not df.empty:
     if 'f_side' not in st.session_state: st.session_state['f_side'] = all_sides
     if 'f_freq' not in st.session_state: st.session_state['f_freq'] = "Daily"
 
-    curr_start, curr_end = st.session_state['f_date']
-    valid_start = max(curr_start, min_d)
-    valid_end = min(curr_end, max_d)
-    if valid_start > valid_end: valid_start = valid_end
-    st.session_state['f_date'] = (valid_start, valid_end)
+    if isinstance(st.session_state['f_date'], tuple) and len(st.session_state['f_date']) == 2:
+        curr_start, curr_end = st.session_state['f_date']
+        valid_start = max(curr_start, min_d)
+        valid_end = min(curr_end, max_d)
+        if valid_start > valid_end: valid_start = valid_end
+        st.session_state['f_date'] = (valid_start, valid_end)
 
     with st.expander("🛠️ Filter Options (Click to Expand)", expanded=False):
         
