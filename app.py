@@ -350,11 +350,32 @@ if not df.empty:
             
         c1, c2 = st.columns([1, 2])
         with c1:
-            st.date_input("Custom Date Range", 
-                          value=st.session_state['f_date'],
-                          min_value=calendar_min, # <--- Changed from min_d
-                          max_value=calendar_max, 
-                          key='f_date') 
+            # --- FIX: SPLIT START & END DATE WIDGETS ---
+            # Unpack the current values
+            curr_start, curr_end = final_val
+            
+            # Create two small columns side-by-side
+            d_col1, d_col2 = st.columns(2)
+            
+            with d_col1:
+                # Note: No 'key' here. We handle state manually below.
+                new_start = st.date_input("Start Date", 
+                                          value=curr_start,
+                                          min_value=calendar_min,
+                                          max_value=calendar_max)
+            with d_col2:
+                new_end = st.date_input("End Date", 
+                                        value=curr_end,
+                                        min_value=calendar_min,
+                                        max_value=calendar_max)
+            
+            # Safety: Ensure Start isn't after End
+            if new_start > new_end:
+                new_start = new_end
+            
+            # Update the main session state so the rest of the app works
+            st.session_state['f_date'] = (new_start, new_end)
+
             st.selectbox("Timeframe Aggregation", timeframes, key='f_freq')
         with c2:
             st.multiselect("Account", all_accounts, key='f_acc')
