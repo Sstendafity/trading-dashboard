@@ -515,7 +515,7 @@ else:
                 <div class="metric-card">
                     <div class="metric-label">{acc} Win Rate and Net P&L</div>
                     <div class="metric-value {wr_class}">{acc_wr:.2f}%</div>
-                    <div style="font-size: 24px; font-weight: bold; margin-top:5px;" class="{net_class}">
+                    <div style="font-size: 22px; font-weight: bold; margin-top:5px;" class="{net_class}">
                         ₹ {acc_net:,.2f}
                     </div>
                 </div>
