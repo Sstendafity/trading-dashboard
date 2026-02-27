@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 import os
@@ -150,36 +151,68 @@ def process_pnl_statement(df, filename):
                    'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
     return df[target_cols]
 
+def process_future_position_history(df, filename):
+    """Logic for the new A5 Future Position history format"""
+    # Clean Account Name (e.g., "A5.xlsx" -> "A5")
+    account_name = filename.split()[0].replace('.xlsx', '').replace('.csv', '')
+    
+    df['dt'] = pd.to_datetime(df['Exit Time (IST)'], errors='coerce')
+    df = df.dropna(subset=['dt']).copy()
+    
+    df['Date'] = df['dt'].dt.date
+    df['Time'] = df['dt'].dt.time.astype(str)
+    
+    df['Order ID'] = df['Symbol'] + "_" + df['Exit Time (IST)'].astype(str)
+    df['Contract'] = df['Symbol']
+    
+    # Calculate Side (LONG if (Exit-Entry)*PNL > 0, else SHORT)
+    df['Side'] = np.where((df['Exit Price (USDT)'] - df['Entry Price (USDT)']) * df['Realized PNL (USDT)'] >= 0, 'long', 'short')
+    
+    # Apply Rate
+    usd_to_inr = 90.96
+    df['Realised P&L(INR)'] = df['Realized PNL (USDT)'] * usd_to_inr
+    
+    # Estimate Fees: 0.05% standard transaction fee applied to Entry & Exit
+    df['Trading Fees(INR)'] = (df['Quantity'] * (df['Entry Price (USDT)'] + df['Exit Price (USDT)']) * 0.0005) * usd_to_inr
+    
+    df['Status'] = 'closed'
+    df['Account'] = account_name
+    
+    target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
+                   'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
+    return df[target_cols]
+
 def process_legacy_csv(df, filename):
     """Logic for the original CSV format"""
+    # Safety check: if it's a random file (like deposits), ignore it
+    if 'Time' not in df.columns or 'Realised P&L' not in df.columns:
+        return pd.DataFrame()
+
     if 'Status' in df.columns:
         df = df[df['Status'] == 'closed'].copy()
     
     temp_dt = df['Time'].astype(str).str.split(' IST').str[0]
     temp_dt = pd.to_datetime(temp_dt, errors='coerce')
     
-    df['Date'] = temp_dt.dt.date
-    df['Time'] = temp_dt.dt.time.astype(str)
+    df = df[temp_dt.notna()].copy()
+    df['Date'] = temp_dt[temp_dt.notna()].dt.date
+    df['Time'] = temp_dt[temp_dt.notna()].dt.time.astype(str)
     
     fixed_conversion_rate = 85.0
     
-    if 'Realised P&L' in df.columns:
-        df['Realised P&L(INR)'] = df['Realised P&L'] * fixed_conversion_rate
-        df['Trading Fees(INR)'] = df['Trading Fees'] * fixed_conversion_rate
+    df['Realised P&L(INR)'] = df['Realised P&L'] * fixed_conversion_rate
+    df['Trading Fees(INR)'] = df['Trading Fees'] * fixed_conversion_rate
         
     df['Account'] = filename.split()[0]
     
     if 'Order ID' in df.columns:
         df['Order ID'] = df['Order ID'].astype(str)
     
-    target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
-                   'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
-    # Filter columns that actually exist
+    target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
     available_cols = [c for c in target_cols if c in df.columns]
     return df[available_cols]
 
 def normalize_raw_data(file):
-    # 1. DETERMINE FILE TYPE
     is_excel = False
     if file.name.endswith(('.xlsx', '.xls')):
         is_excel = True
@@ -192,16 +225,19 @@ def normalize_raw_data(file):
             is_excel = True
             file.seek(0)
 
-    # 2. PROCESS BASED ON TYPE
     if is_excel:
         try:
-            # Peek for signature
+            xl = pd.ExcelFile(file)
+            # 1. Check for the new format inside the Excel sheet
+            if 'Future Position history' in xl.sheet_names:
+                df = xl.parse('Future Position history')
+                return process_future_position_history(df, file.name)
+            
             df_peek = pd.read_excel(file, header=None, nrows=5)
             file.seek(0)
-            
             first_cell = str(df_peek.iloc[0, 0])
+            
             if "P&L Statement" in first_cell:
-                # Use New Logic
                 df = pd.read_excel(file, skiprows=13)
                 return process_pnl_statement(df, file.name)
             else:
@@ -209,14 +245,16 @@ def normalize_raw_data(file):
                 return process_legacy_csv(df, file.name)
         except Exception:
             return pd.DataFrame()
-            
     else:
         try:
             first_line = file.readline().decode('utf-8')
             file.seek(0)
             
-            if "P&L Statement" in first_line:
-                # For CSV version of the P&L statement
+            # 2. Check for the new format if uploaded as CSV
+            if "Exit Time (IST)" in first_line and "Realized PNL" in first_line:
+                df = pd.read_csv(file)
+                return process_future_position_history(df, file.name)
+            elif "P&L Statement" in first_line:
                 df = pd.read_csv(file, skiprows=13)
                 return process_pnl_statement(df, file.name)
             else:
