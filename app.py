@@ -11,35 +11,53 @@ from github import Github
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide")
 # --- LOGIN GATEKEEPER ---
+# Define how many minutes of inactivity trigger a logout
+SESSION_TIMEOUT_MINUTES = 2 
+
 def check_password():
-    """Returns `True` if the user entered the correct password."""
+    """Returns `True` if the user entered the correct password and session is valid."""
+    
+    # 1. Check for inactivity timeout first if they are already logged in
+    if st.session_state.get("password_correct"):
+        last_active = st.session_state.get("last_activity")
+        if last_active:
+            elapsed_minutes = (datetime.datetime.now() - last_active).total_seconds() / 60
+            if elapsed_minutes > SESSION_TIMEOUT_MINUTES:
+                # Time is up. Revoke access.
+                st.session_state["password_correct"] = False
+                st.session_state["session_expired"] = True
+            else:
+                # They are active. Reset the clock.
+                st.session_state["last_activity"] = datetime.datetime.now()
+
     def password_entered():
         """Checks whether a password entered by the user is correct."""
         if st.session_state["password"] == st.secrets["APP_PASSWORD"]:
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Don't store the password in session state
+            st.session_state["last_activity"] = datetime.datetime.now() # Start the clock
+            st.session_state["session_expired"] = False
+            del st.session_state["password"]  # Don't store the password
         else:
             st.session_state["password_correct"] = False
 
-    if "password_correct" not in st.session_state:
-        # First run, show input for password.
+    # 2. Render the login screen if they are not authenticated
+    if not st.session_state.get("password_correct"):
         st.title("🔒 Access Restricted")
         st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        
+        if st.session_state.get("session_expired"):
+            st.warning(f"⏱️ Session expired after {SESSION_TIMEOUT_MINUTES} minutes of inactivity. Please log in again.")
+        elif "password_correct" in st.session_state and not st.session_state["password_correct"]:
+            st.error("🚫 Incorrect password.")
+        
         return False
-    elif not st.session_state["password_correct"]:
-        # Password incorrect, show input + error.
-        st.title("🔒 Access Restricted")
-        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
-        st.error("🚫 Incorrect password.")
-        return False
-    else:
-        # Password correct.
-        return True
+        
+    return True
 
 if not check_password():
     st.stop()  # Stop rendering the rest of the app
 
-    
+
 MASTER_DB = "trade_history.csv"
 
 # --- CONFIGURATION FOR GITHUB ---
