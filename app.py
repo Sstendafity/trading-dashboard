@@ -39,6 +39,14 @@ def check_password():
             del st.session_state["password"]  # Don't store the password
         else:
             st.session_state["password_correct"] = False
+    
+    # ... existing password_entered function ...
+
+    # --- ADD THIS: Force the browser to refresh after the timeout ---
+    if st.session_state.get("password_correct"):
+        # Convert minutes to seconds for the HTML refresh tag
+        refresh_seconds = SESSION_TIMEOUT_MINUTES * 60
+        st.markdown(f'<meta http-equiv="refresh" content="{refresh_seconds}">', unsafe_allow_html=True)
 
     # 2. Render the login screen if they are not authenticated
     if not st.session_state.get("password_correct"):
