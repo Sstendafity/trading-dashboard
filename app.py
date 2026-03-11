@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import os
 import datetime
+import re
 from github import Github
 
 # --- PAGE CONFIGURATION ---
@@ -85,7 +86,16 @@ def update_github_repo(csv_content):
 def load_master_db():
     if os.path.exists(MASTER_DB):
         try:
-            return pd.read_csv(MASTER_DB)
+            db = pd.read_csv(MASTER_DB)
+            if 'Account' in db.columns:
+                db['Account'] = db['Account'].astype(str).apply(lambda x: re.sub(r'^([a-zA-Z]+)(\d+)$', r'\1-\2', x.strip()))
+            
+            # --- CHANGE: Normalize 'Side' terminology instantly ---
+            if 'Side' in db.columns:
+                side_map = {'buy': 'Long', 'long': 'Long', 'sell': 'Short', 'short': 'Short', 'unknown': 'Unknown'}
+                db['Side'] = db['Side'].astype(str).str.lower().map(side_map).fillna('Unknown')
+                
+            return db
         except Exception:
             return pd.DataFrame()
     return pd.DataFrame(columns=['Account', 'Date', 'Time', 'Contract', 'Side', 'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID'])
@@ -97,6 +107,16 @@ def save_to_master(new_df):
         old_df = pd.DataFrame()
 
     combined = pd.concat([old_df, new_df], ignore_index=True)
+    
+    # --- ADD THIS: Normalize Account Names before saving (A6 -> A-6) ---
+    # --- ADD THIS: Normalize Account Names before saving (A6 -> A-6) ---
+    if 'Account' in combined.columns:
+        combined['Account'] = combined['Account'].astype(str).apply(lambda x: re.sub(r'^([a-zA-Z]+)(\d+)$', r'\1-\2', x.strip()))
+        
+    # --- CHANGE: Normalize 'Side' terminology before saving ---
+    if 'Side' in combined.columns:
+        side_map = {'buy': 'Long', 'long': 'Long', 'sell': 'Short', 'short': 'Short', 'unknown': 'Unknown'}
+        combined['Side'] = combined['Side'].astype(str).str.lower().map(side_map).fillna('Unknown')
     
     if 'Order ID' in combined.columns:
         combined['Order ID'] = combined['Order ID'].astype(str)
@@ -182,6 +202,35 @@ def process_future_position_history(df, filename):
                    'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
     return df[target_cols]
 
+def process_coindcx_future(df, filename):
+    """Logic for the new A6 CoinDCX Future Orders format"""
+    account_name = filename.split()[0].replace('.xlsx', '').replace('.csv', '')
+    
+    # Clean Dates
+    df['dt'] = pd.to_datetime(df['Transaction time'], errors='coerce')
+    df = df.dropna(subset=['dt']).copy()
+    
+    df['Date'] = df['dt'].dt.date
+    df['Time'] = df['dt'].dt.time.astype(str)
+    
+    df['Order ID'] = df['Transaction ID'].astype(str)
+    # Clean up contract names (e.g. "B-BTC_USDT" -> "BTC_USDT")
+    df['Contract'] = df['Crypto Pair'].str.replace('B-', '', regex=False)
+    
+    # FIX FOR MISSING SIDE: Default to unknown
+    df['Side'] = 'unknown'
+    
+    # Financials (CoinDCX provides INR directly)
+    df['Realised P&L(INR)'] = pd.to_numeric(df['Gross P&L for this transaction(in INR)'], errors='coerce').fillna(0)
+    df['Trading Fees(INR)'] = pd.to_numeric(df['Fees(in INR)'], errors='coerce').fillna(0)
+    
+    df['Status'] = 'closed'
+    df['Account'] = account_name
+    
+    target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
+                   'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
+    return df[target_cols]
+
 def process_legacy_csv(df, filename):
     """Logic for the original CSV format"""
     # Safety check: if it's a random file (like deposits), ignore it
@@ -228,15 +277,23 @@ def normalize_raw_data(file):
     if is_excel:
         try:
             xl = pd.ExcelFile(file)
-            # 1. Check for the new format inside the Excel sheet
+            # 1. Check A5 format
             if 'Future Position history' in xl.sheet_names:
                 df = xl.parse('Future Position history')
                 return process_future_position_history(df, file.name)
             
-            df_peek = pd.read_excel(file, header=None, nrows=5)
+            df_peek = pd.read_excel(file, header=None, nrows=15)
             file.seek(0)
-            first_cell = str(df_peek.iloc[0, 0])
             
+            # 2. Check A6 CoinDCX format (skipping dynamic rows)
+            for i in range(len(df_peek)):
+                row_str = " ".join(df_peek.iloc[i].astype(str).fillna(""))
+                if "Transaction ID" in row_str and "Crypto Pair" in row_str:
+                    df = pd.read_excel(file, skiprows=i)
+                    return process_coindcx_future(df, file.name)
+            
+            # 3. Check A4 P&L format
+            first_cell = str(df_peek.iloc[0, 0])
             if "P&L Statement" in first_cell:
                 df = pd.read_excel(file, skiprows=13)
                 return process_pnl_statement(df, file.name)
@@ -247,13 +304,26 @@ def normalize_raw_data(file):
             return pd.DataFrame()
     else:
         try:
-            first_line = file.readline().decode('utf-8')
+            file.seek(0)
+            lines = [file.readline().decode('utf-8', errors='ignore') for _ in range(15)]
             file.seek(0)
             
-            # 2. Check for the new format if uploaded as CSV
+            # 1. Check A6 CoinDCX format in CSV
+            coindcx_skip = -1
+            for i, line in enumerate(lines):
+                if "Transaction ID" in line and "Crypto Pair" in line:
+                    coindcx_skip = i
+                    break
+            if coindcx_skip >= 0:
+                df = pd.read_csv(file, skiprows=coindcx_skip)
+                return process_coindcx_future(df, file.name)
+            
+            first_line = lines[0]
+            # 2. Check A5 format in CSV
             if "Exit Time (IST)" in first_line and "Realized PNL" in first_line:
                 df = pd.read_csv(file)
                 return process_future_position_history(df, file.name)
+            # 3. Check A4 format in CSV
             elif "P&L Statement" in first_line:
                 df = pd.read_csv(file, skiprows=13)
                 return process_pnl_statement(df, file.name)
@@ -494,7 +564,13 @@ else:
     st.divider()
 
     st.markdown("### Account Breakdown")
-    unique_accounts = sorted(df_filtered['Account'].unique())
+    
+    # --- CHANGE: Extract the number and sort accounts by it ---
+    def sort_by_number(acc):
+        nums = re.findall(r'\d+', acc)
+        return int(nums[0]) if nums else float('inf')
+        
+    unique_accounts = sorted(df_filtered['Account'].unique(), key=sort_by_number)
     
     if len(unique_accounts) > 0:
         cols = st.columns(len(unique_accounts))
