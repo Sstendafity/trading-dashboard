@@ -573,30 +573,31 @@ else:
     unique_accounts = sorted(df_filtered['Account'].unique(), key=sort_by_number)
     
     if len(unique_accounts) > 0:
-        cols = st.columns(len(unique_accounts))
-        for i, acc in enumerate(unique_accounts):
-            acc_data = df_filtered[df_filtered['Account'] == acc]
-            acc_net = acc_data['Net PnL'].sum()
-            acc_wins = acc_data[acc_data['Type'] == 'Win'].shape[0]
-            acc_losses = acc_data[acc_data['Type'] == 'Loss'].shape[0]
-            acc_total = acc_wins + acc_losses
-            acc_wr = (acc_wins / acc_total * 100) if acc_total > 0 else 0
+        # --- FIX: Wrap columns to a maximum of 4 per row ---
+        MAX_COLS = 4 
+        
+        # Loop through accounts in chunks of MAX_COLS
+        for i in range(0, len(unique_accounts), MAX_COLS):
+            chunk = unique_accounts[i:i + MAX_COLS]
+            cols = st.columns(MAX_COLS)
             
-            acc_net_color = "green" if acc_net > 0 else ("red" if acc_net < 0 else "normal")
-            
-            with cols[i]:
-                wr_class = "green-text" if acc_wr >= 50 else "red-text"
-                net_class = "green-text" if acc_net > 0 else ("red-text" if acc_net < 0 else "normal-text")
-                html = f"""
-                <div class="metric-card">
-                    <div class="metric-label">{acc} Win Rate and Net P&L</div>
-                    <div class="metric-value {wr_class}">{acc_wr:.2f}%</div>
-                    <div style="font-size: 22px; font-weight: bold; margin-top:5px;" class="{net_class}">
-                        ₹ {acc_net:,.2f}
-                    </div>
-                </div>
-                """
-                st.markdown(html, unsafe_allow_html=True)
+            for j, acc in enumerate(chunk):
+                acc_data = df_filtered[df_filtered['Account'] == acc]
+                acc_net = acc_data['Net PnL'].sum()
+                acc_wins = acc_data[acc_data['Type'] == 'Win'].shape[0]
+                acc_total = acc_wins + acc_data[acc_data['Type'] == 'Loss'].shape[0]
+                acc_wr = (acc_wins / acc_total * 100) if acc_total > 0 else 0
+                
+                with cols[j]:
+                    wr_class = "green-text" if acc_wr >= 50 else "red-text"
+                    net_class = "green-text" if acc_net > 0 else ("red-text" if acc_net < 0 else "normal-text")
+                    html = f"""
+                    <div class="metric-card">
+                        <div class="metric-label">{acc} Win Rate and Net P&L</div>
+                        <div class="metric-value {wr_class}">{acc_wr:.2f}%</div>
+                        <div style="font-size: 24px; font-weight: bold; margin-top:5px;" class="{net_class}">₹ {acc_net:,.2f}</div>
+                    </div>"""
+                    st.markdown(html, unsafe_allow_html=True)
     
     st.divider()
 
