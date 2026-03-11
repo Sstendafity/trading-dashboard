@@ -10,6 +10,36 @@ from github import Github
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide")
+# --- LOGIN GATEKEEPER ---
+def check_password():
+    """Returns `True` if the user entered the correct password."""
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if st.session_state["password"] == st.secrets["APP_PASSWORD"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Don't store the password in session state
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        # First run, show input for password.
+        st.title("🔒 Access Restricted")
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        # Password incorrect, show input + error.
+        st.title("🔒 Access Restricted")
+        st.text_input("Enter Password", type="password", on_change=password_entered, key="password")
+        st.error("🚫 Incorrect password.")
+        return False
+    else:
+        # Password correct.
+        return True
+
+if not check_password():
+    st.stop()  # Stop rendering the rest of the app
+
+    
 MASTER_DB = "trade_history.csv"
 
 # --- CONFIGURATION FOR GITHUB ---
