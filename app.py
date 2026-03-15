@@ -686,7 +686,7 @@ else:
                 # --- ADD THIS: Hardcoded Group Label Logic ---
                 acc_upper = str(acc).upper()
                 if acc_upper in ['A-1', 'A-2', 'A-3']: grp_label = 'Delta'
-                elif acc_upper == 'A-4': grp_label = 'CS'
+                elif acc_upper in ['A-4', 'A-5', 'A-6', 'A-7', 'A-8']: grp_label = 'CS'
                 elif acc_upper == 'A-9': grp_label = 'PI42'
                 elif acc_upper == 'A-10': grp_label = 'CDX'
                 elif 'MUDREX' in acc_upper: grp_label = 'Mudrex'
