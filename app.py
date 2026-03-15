@@ -258,6 +258,34 @@ def process_future_position_history(df, filename):
                    'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
     return df[target_cols]
 
+def process_a4_format(df, filename):
+    """Logic for the new A-4 Trades file format"""
+    # Standardize Account Name (e.g. A4 -> A-4)
+    account_name = filename.split()[0].replace('.xlsx', '').replace('.csv', '')
+    account_name = re.sub(r'^([a-zA-Z]+)(\d+)$', r'\1-\2', account_name)
+    
+    # Clean Dates using Executed At
+    df['dt'] = pd.to_datetime(df['Executed At'], errors='coerce')
+    df = df.dropna(subset=['dt']).copy()
+    
+    df['Date'] = df['dt'].dt.date
+    df['Time'] = df['dt'].dt.time.astype(str)
+    
+    df['Order ID'] = df['Trade ID'].astype(str)
+    df['Contract'] = df['Coin'].astype(str).str.upper() # e.g., 'btc' -> 'BTC'
+    df['Side'] = df['Side'].astype(str)
+    
+    # Financials (Already in INR, no conversion needed)
+    df['Realised P&L(INR)'] = pd.to_numeric(df['Realised P&L'], errors='coerce').fillna(0)
+    df['Trading Fees(INR)'] = pd.to_numeric(df['Commission'], errors='coerce').fillna(0)
+    
+    df['Status'] = 'closed'
+    df['Account'] = account_name
+    
+    target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
+                   'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
+    return df[target_cols]
+
 def process_coindcx_future(df, filename):
     """Logic for the new A6 CoinDCX Future Orders format"""
     account_name = filename.split()[0].replace('.xlsx', '').replace('.csv', '')
@@ -333,22 +361,29 @@ def normalize_raw_data(file):
     if is_excel:
         try:
             xl = pd.ExcelFile(file)
-            # 1. Check A5 format
+            # 1. Check A-4 format (Excel) - Look for specific sheet
+            if 'Trades' in xl.sheet_names:
+                df = xl.parse('Trades')
+                # A4 files seem clean, headers on line 0
+                return process_a4_format(df, file.name)
+            
+            # 2. Check A5 format (Excel)
             if 'Future Position history' in xl.sheet_names:
                 df = xl.parse('Future Position history')
                 return process_future_position_history(df, file.name)
             
+            # Signature checks for other formats
             df_peek = pd.read_excel(file, header=None, nrows=15)
             file.seek(0)
             
-            # 2. Check A6 CoinDCX format (skipping dynamic rows)
+            # 3. Check A6 CoinDCX format
             for i in range(len(df_peek)):
                 row_str = " ".join(df_peek.iloc[i].astype(str).fillna(""))
                 if "Transaction ID" in row_str and "Crypto Pair" in row_str:
                     df = pd.read_excel(file, skiprows=i)
                     return process_coindcx_future(df, file.name)
             
-            # 3. Check A4 P&L format
+            # 4. Check A4 P&L format (Legacy header skip)
             first_cell = str(df_peek.iloc[0, 0])
             if "P&L Statement" in first_cell:
                 df = pd.read_excel(file, skiprows=13)
@@ -375,11 +410,16 @@ def normalize_raw_data(file):
                 return process_coindcx_future(df, file.name)
             
             first_line = lines[0]
-            # 2. Check A5 format in CSV
+            # 2. Check A-4 format (CSV) - Look for columns specific to Trades file
+            if "Trade ID" in first_line and "Commission" in first_line:
+                df = pd.read_csv(file)
+                return process_a4_format(df, file.name)
+                
+            # 3. Check A5 format in CSV
             if "Exit Time (IST)" in first_line and "Realized PNL" in first_line:
                 df = pd.read_csv(file)
                 return process_future_position_history(df, file.name)
-            # 3. Check A4 format in CSV
+            # 4. Check A4 format in CSV (Legacy header skip)
             elif "P&L Statement" in first_line:
                 df = pd.read_csv(file, skiprows=13)
                 return process_pnl_statement(df, file.name)
@@ -621,18 +661,16 @@ else:
 
     st.markdown("### Account Breakdown")
     
-    # --- CHANGE: Extract the number and sort accounts by it ---
-    def sort_by_number(acc):
-        nums = re.findall(r'\d+', acc)
-        return int(nums[0]) if nums else float('inf')
+    def sort_by_prefix_then_number(acc):
+        match = re.search(r'^([a-zA-Z]+)-(\d+)$', str(acc))
+        if match:
+            return (match.group(1).upper(), int(match.group(2)))
+        return ('ZZZ', float('inf'))
         
-    unique_accounts = sorted(df_filtered['Account'].unique(), key=sort_by_number)
+    unique_accounts = sorted(df_filtered['Account'].unique(), key=sort_by_prefix_then_number)
     
     if len(unique_accounts) > 0:
-        # --- FIX: Wrap columns to a maximum of 4 per row ---
         MAX_COLS = 4 
-        
-        # Loop through accounts in chunks of MAX_COLS
         for i in range(0, len(unique_accounts), MAX_COLS):
             chunk = unique_accounts[i:i + MAX_COLS]
             cols = st.columns(MAX_COLS)
@@ -641,18 +679,36 @@ else:
                 acc_data = df_filtered[df_filtered['Account'] == acc]
                 acc_net = acc_data['Net PnL'].sum()
                 acc_wins = acc_data[acc_data['Type'] == 'Win'].shape[0]
-                acc_total = acc_wins + acc_data[acc_data['Type'] == 'Loss'].shape[0]
+                acc_losses = acc_data[acc_data['Type'] == 'Loss'].shape[0]
+                acc_total = acc_wins + acc_losses
                 acc_wr = (acc_wins / acc_total * 100) if acc_total > 0 else 0
+                
+                # --- ADD THIS: Hardcoded Group Label Logic ---
+                acc_upper = str(acc).upper()
+                if acc_upper in ['A-1', 'A-2', 'A-3']: grp_label = 'Delta'
+                elif acc_upper == 'A-4': grp_label = 'CS'
+                elif acc_upper == 'A-9': grp_label = 'PI42'
+                elif acc_upper == 'A-10': grp_label = 'CDX'
+                elif 'MUDREX' in acc_upper: grp_label = 'Mudrex'
+                else: grp_label = 'Other'
+                
+                acc_net_color = "green" if acc_net > 0 else ("red" if acc_net < 0 else "normal")
                 
                 with cols[j]:
                     wr_class = "green-text" if acc_wr >= 50 else "red-text"
                     net_class = "green-text" if acc_net > 0 else ("red-text" if acc_net < 0 else "normal-text")
+                    
+                    # --- CHANGE: Injected the new grey label div above the existing one ---
                     html = f"""
                     <div class="metric-card">
+                        <div style="font-size: 11px; color: #888; text-transform: uppercase; font-weight: bold; margin-bottom: 2px;">{grp_label}</div>
                         <div class="metric-label">{acc} Win Rate and Net P&L</div>
                         <div class="metric-value {wr_class}">{acc_wr:.2f}%</div>
-                        <div style="font-size: 24px; font-weight: bold; margin-top:5px;" class="{net_class}">₹ {acc_net:,.2f}</div>
-                    </div>"""
+                        <div style="font-size: 24px; font-weight: bold; margin-top:5px;" class="{net_class}">
+                            ₹ {acc_net:,.2f}
+                        </div>
+                    </div>
+                    """
                     st.markdown(html, unsafe_allow_html=True)
     
     st.divider()
