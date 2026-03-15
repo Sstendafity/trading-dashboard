@@ -701,7 +701,7 @@ else:
                     # --- CHANGE: Injected the new grey label div above the existing one ---
                     html = f"""
                     <div class="metric-card">
-                        <div style="font-size: 11px; color: #888; text-transform: uppercase; font-weight: bold; margin-bottom: 2px;">{grp_label}</div>
+                        <div style="font-size: 16px; color: #888; text-transform: uppercase; font-weight: bold; margin-bottom: 2px;">{grp_label}</div>
                         <div class="metric-label">{acc} Win Rate and Net P&L</div>
                         <div class="metric-value {wr_class}">{acc_wr:.2f}%</div>
                         <div style="font-size: 24px; font-weight: bold; margin-top:5px;" class="{net_class}">
