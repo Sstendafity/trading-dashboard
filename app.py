@@ -12,7 +12,7 @@ from github import Github
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide")
 # --- LOGIN GATEKEEPER ---
 # Define how many minutes of inactivity trigger a logout
-SESSION_TIMEOUT_MINUTES = 2 
+SESSION_TIMEOUT_MINUTES = 5 
 
 def check_password():
     """Returns `True` if the user entered the correct password and session is valid."""
@@ -174,6 +174,28 @@ def save_to_master(new_df):
         side_map = {'buy': 'Long', 'long': 'Long', 'sell': 'Short', 'short': 'Short', 'unknown': 'Unknown'}
         combined['Side'] = combined['Side'].astype(str).str.lower().map(side_map).fillna('Unknown')
     
+    if 'Date' in combined.columns:
+        def fix_date_time(row):
+            d = str(row['Date']).strip()
+            t = str(row['Time']).strip() if pd.notna(row['Time']) else ''
+
+            # Case 1: datetime embedded in Date (e.g. "2026-02-19 17:20:23.071065")
+            if ' ' in d and '-' in d:
+                dt = datetime.datetime.fromisoformat(d)
+                return pd.Series({'Date': dt.strftime('%Y-%m-%d'), 'Time': dt.strftime('%H:%M:%S')})
+
+            # Case 2: DD/MM/YYYY → YYYY-MM-DD
+            if '/' in d:
+                dt = datetime.datetime.strptime(d, "%d/%m/%Y")
+                return pd.Series({'Date': dt.strftime('%Y-%m-%d'), 'Time': t})
+
+            # Case 3: already YYYY-MM-DD, keep as-is
+            return pd.Series({'Date': d, 'Time': t})
+
+        fixed = combined.apply(fix_date_time, axis=1)
+        combined['Date'] = fixed['Date']
+        combined['Time'] = fixed['Time']
+
     if 'Order ID' in combined.columns:
         combined['Order ID'] = combined['Order ID'].astype(str)
         combined = combined.drop_duplicates(subset=['Order ID'], keep='last')
