@@ -490,7 +490,7 @@ df_filtered = pd.DataFrame()
 if not df.empty:
     # --- CRITICAL FIX: Handle Mixed Date Formats ---
     # This prevents the "ValueError: time data doesn't match format" error
-    df['Date'] = pd.to_datetime(df['Date'], format='mixed', dayfirst=True, errors='coerce')
+    df['Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%d', errors='coerce')
     df = df.dropna(subset=['Date'])
     
     if df['Date'].notna().any():
