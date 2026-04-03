@@ -248,6 +248,59 @@ def process_pnl_statement(df, filename):
     target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
                    'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
     return df[target_cols]
+def process_zebpay_format(df, filename):
+    """Logic for ZebPay TXNHISTORY_STATEMENT format (A-15)"""
+    account_name = filename.split()[0].replace('.xlsx', '').replace('.csv', '')
+    account_name = re.sub(r'^([a-zA-Z]+)(\d+)$', r'\1-\2', account_name)
+
+    # Only process rows that belong to an actual trade (have a Trade ID)
+    df = df[df['Trade ID'].notna()].copy()
+
+    # Parse datetime — Time column has format "14:45:05.251Z"
+    df['dt'] = pd.to_datetime(
+        df['Date'].astype(str) + ' ' + df['Time (in UTC)'].astype(str).str.replace('Z', '', regex=False),
+        errors='coerce'
+    )
+
+    # Pivot: for each Trade ID, extract P&L and fees
+    pnl = (
+        df[df['Type'] == 'REALIZED_PNL']
+        .groupby('Trade ID')
+        .agg(
+            Date=('dt', 'first'),
+            Symbol=('Symbol', 'first'),
+            PnL=('Amount', 'sum')
+        )
+        .reset_index()
+    )
+
+    fees = (
+        df[df['Type'].isin(['COMMISSION', 'GST_ON_COMMISSION'])]
+        .groupby('Trade ID')['Amount']
+        .sum()
+        .abs()  # stored as negatives, flip to positive
+        .reset_index()
+        .rename(columns={'Amount': 'Fees'})
+    )
+
+    result = pnl.merge(fees, on='Trade ID', how='left')
+    result['Fees'] = result['Fees'].fillna(0)
+
+    result['Account'] = account_name
+    result['Date_str'] = result['Date'].dt.strftime('%Y-%m-%d')
+    result['Time_str'] = result['Date'].dt.strftime('%H:%M:%S')
+    result['Order ID'] = result['Trade ID'].astype(int).astype(str)
+    result['Contract'] = result['Symbol']
+    result['Side'] = 'Unknown'
+    result['Status'] = 'closed'
+    result['Realised P&L(INR)'] = result['PnL']
+    result['Trading Fees(INR)'] = result['Fees']
+
+    result = result.rename(columns={'Date_str': 'Date', 'Time_str': 'Time'})
+
+    target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side',
+                   'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
+    return result[target_cols]
 
 def process_future_position_history(df, filename):
     """Logic for the new A5 Future Position history format"""
@@ -393,6 +446,11 @@ def normalize_raw_data(file):
             if 'Future Position history' in xl.sheet_names:
                 df = xl.parse('Future Position history')
                 return process_future_position_history(df, file.name)
+        
+            # ADD THIS — ZebPay format
+            if 'TXNHISTORY_STATEMENT' in xl.sheet_names:
+                df = xl.parse('TXNHISTORY_STATEMENT')
+                return process_zebpay_format(df, file.name)
             
             # Signature checks for other formats
             df_peek = pd.read_excel(file, header=None, nrows=15)
