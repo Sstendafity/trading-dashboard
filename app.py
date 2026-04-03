@@ -162,6 +162,10 @@ def save_to_master(new_df):
     else:
         old_df = pd.DataFrame()
 
+    # ADD THESE TWO LINES — deduplicate columns before concat
+    old_df = old_df.loc[:, ~old_df.columns.duplicated()]
+    new_df = new_df.loc[:, ~new_df.columns.duplicated()]
+
     combined = pd.concat([old_df, new_df], ignore_index=True)
     
     # --- ADD THIS: Normalize Account Names before saving (A6 -> A-6) ---
@@ -286,17 +290,16 @@ def process_zebpay_format(df, filename):
     result = pnl.merge(fees, on='Trade ID', how='left')
     result['Fees'] = result['Fees'].fillna(0)
 
+    # WITH this — avoid the duplicate Date column entirely
     result['Account'] = account_name
-    result['Date_str'] = result['Date'].dt.strftime('%Y-%m-%d')
-    result['Time_str'] = result['Date'].dt.strftime('%H:%M:%S')
+    result['Time'] = result['Date'].dt.strftime('%H:%M:%S')
+    result['Date'] = result['Date'].dt.strftime('%Y-%m-%d')  # overwrite in place
     result['Order ID'] = result['Trade ID'].astype(int).astype(str)
     result['Contract'] = result['Symbol']
     result['Side'] = 'Unknown'
     result['Status'] = 'closed'
     result['Realised P&L(INR)'] = result['PnL']
     result['Trading Fees(INR)'] = result['Fees']
-
-    result = result.rename(columns={'Date_str': 'Date', 'Time_str': 'Time'})
 
     target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side',
                    'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
