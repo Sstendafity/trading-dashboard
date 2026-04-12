@@ -1,8 +1,6 @@
 name: BTC Position Alert
 
 on:
-  schedule:
-    - cron: '5,20,35,50 * * * *'   # runs at :05, :20, :35, :50 — avoids peak times
   workflow_dispatch:
   push:
     branches:
