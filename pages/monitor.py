@@ -284,7 +284,7 @@ def color_val(v):
 
 refresh_interval = st.sidebar.selectbox(
     "Auto Refresh", ["Off", "30s", "1 min", "5 min"],
-    index=0
+    index=1
 )
 refresh_ms = {"30s": 30_000, "1 min": 60_000, "5 min": 300_000}
 if refresh_interval != "Off":
