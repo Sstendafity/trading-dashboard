@@ -166,6 +166,7 @@ def _from_coinbase():
     return {"price": price, "change_pct": 0, "high": 0, "low": 0, "ok": True}
 
 # NO @st.cache_data — use session_state so price updates on every autorefresh rerun
+@st.cache_data(ttl=15)
 def fetch_btc_price():
     apis = [_from_gemini, _from_bitstamp, _from_kraken, _from_coinbase]
     for i, api in enumerate(apis):
