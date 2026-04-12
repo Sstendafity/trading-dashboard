@@ -165,21 +165,20 @@ def _from_coinbase():
     price = float(r.json()["data"]["amount"])
     return {"price": price, "change_pct": 0, "high": 0, "low": 0, "ok": True}
 
-@st.cache_data(ttl=15)
+# NO @st.cache_data — use session_state so price updates on every autorefresh rerun
 def fetch_btc_price():
-    apis = [
-        _from_gemini,    # most stable on AWS
-        _from_bitstamp,  # second most stable
-        _from_kraken,    # third
-        _from_coinbase,  # price only fallback
-    ]
+    apis = [_from_gemini, _from_bitstamp, _from_kraken, _from_coinbase]
     for i, api in enumerate(apis):
         try:
-            return api()
+            result = api()
+            st.session_state["last_price"] = result  # store for display if next fetch fails
+            return result
         except Exception:
             if i < len(apis) - 1:
                 time.sleep(1)
-    return {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False}
+    # All failed — return last known price if available, otherwise zeros
+    return st.session_state.get("last_price", 
+           {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False})
 
 # ==========================================
 # STORAGE
