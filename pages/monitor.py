@@ -169,29 +169,18 @@ def _from_coinbase():
     return {"price": price, "change_pct": 0, "high": 0, "low": 0, "ok": True}
 
 def fetch_btc_price():
-    now = datetime.datetime.now()
-    last_fetched = st.session_state.get("price_last_fetched")
-    cached = st.session_state.get("price_cache")
-
-    # Return cached value if fetched within last 25 seconds
-    if cached and last_fetched and (now - last_fetched).total_seconds() < 25:
-        return cached
-
-    # Otherwise fetch fresh from APIs
     apis = [_from_gemini, _from_bitstamp, _from_kraken, _from_coinbase]
     for i, api in enumerate(apis):
         try:
             result = api()
-            # Store in session_state
-            st.session_state["price_cache"] = result
-            st.session_state["price_last_fetched"] = now
+            st.session_state["price_cache"] = result  # save as fallback only
             return result
         except Exception:
             if i < len(apis) - 1:
-                time.sleep(1)
-
-    # All failed — return last known price to avoid showing $0
-    return cached or {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False}
+                time.sleep(0.5)
+    # All APIs failed — return last known price instead of $0
+    return st.session_state.get("price_cache",
+           {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False})
 
 # ==========================================
 # STORAGE
@@ -331,10 +320,8 @@ with col_high:
 with col_low:
     st.markdown(f'<div class="stat-label">24h Low</div><div class="stat-value" style="color:#fff">${price_data["low"]:,.1f}</div>', unsafe_allow_html=True)
 with col_refresh:
-    if st.button("🔄", help="Force refresh price"):
-        # Clear session_state cache to force immediate fresh API call
+    if st.button("🔄", help="Refresh price"):
         st.session_state.pop("price_cache", None)
-        st.session_state.pop("price_last_fetched", None)
         st.rerun()
 
 st.markdown("---")
