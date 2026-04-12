@@ -565,15 +565,17 @@ with st.expander(form_title, expanded=(editing_idx is not None or not orders)):
 # AUTO REFRESH
 # ==========================================
 
+from streamlit_autorefresh import st_autorefresh
+
 refresh_interval = st.sidebar.selectbox(
     "Auto Refresh", ["Off", "30s", "1 min", "5 min"],
-    index=1
+    index=0  # default to Off — safer
 )
-refresh_map = {"30s": 30, "1 min": 60, "5 min": 300}
+refresh_ms = {"30s": 30_000, "1 min": 60_000, "5 min": 300_000}
+
 if refresh_interval != "Off":
-    seconds = refresh_map[refresh_interval]
-    st.sidebar.caption(f"Page refreshes every {refresh_interval}")
-    st.markdown(f'<meta http-equiv="refresh" content="{seconds}">', unsafe_allow_html=True)
+    st_autorefresh(interval=refresh_ms[refresh_interval], key="price_refresh")
+    st.sidebar.caption(f"Refreshing every {refresh_interval}")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(f"**BTC Price:** ${cp:,.1f}")
