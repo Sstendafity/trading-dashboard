@@ -5,6 +5,7 @@ import json
 import os
 import datetime
 import time
+import ccxt
 from github import Github
 import sys
 sys.path.insert(0, os.getcwd())
@@ -118,69 +119,106 @@ div.stButton > button {
 """, unsafe_allow_html=True)
 
 # ==========================================
-# PRICE FETCHING
-# — No @st.cache_data, uses session_state
-#   with a manual 25s TTL so every
-#   autorefresh (30s) gets a fresh price
+# PRICE FETCHING — CCXT with fallbacks
 # ==========================================
 
-def _from_gemini():
-    r = requests.get("https://api.gemini.com/v2/ticker/btcusd", timeout=10)
-    data = r.json()
-    price = float(data["close"])
-    open_ = float(data["open"])
+def fetch_with_ccxt():
+    """
+    Try multiple exchanges via CCXT.
+    OKX, KuCoin, Gate.io, HTX are all accessible from AWS/Streamlit Cloud.
+    """
+    exchanges_to_try = ['okx', 'kucoin', 'gateio', 'htx']
+    for exchange_id in exchanges_to_try:
+        try:
+            exchange = getattr(ccxt, exchange_id)({
+                'timeout': 10000,
+                'enableRateLimit': False,
+            })
+            ticker = exchange.fetch_ticker('BTC/USDT')
+            price = float(ticker['last'])
+            change_pct = float(ticker['percentage'] or 0)
+            high = float(ticker['high'] or 0)
+            low = float(ticker['low'] or 0)
+            return {
+                "price": price,
+                "change_pct": change_pct,
+                "high": high,
+                "low": low,
+                "ok": True,
+                "source": exchange_id
+            }
+        except Exception:
+            continue
+    return None
+
+def fetch_with_coingecko():
+    """CoinGecko REST fallback — was working before."""
+    r = requests.get(
+        "https://api.coingecko.com/api/v3/coins/markets"
+        "?vs_currency=usd&ids=bitcoin",
+        timeout=10
+    )
+    data = r.json()[0]
     return {
-        "price": price,
-        "change_pct": ((price - open_) / open_) * 100,
-        "high": float(data["high"]),
-        "low": float(data["low"]),
-        "ok": True
+        "price": float(data["current_price"]),
+        "change_pct": float(data["price_change_percentage_24h"] or 0),
+        "high": float(data["high_24h"]),
+        "low": float(data["low_24h"]),
+        "ok": True,
+        "source": "coingecko"
     }
 
-def _from_bitstamp():
-    r = requests.get("https://www.bitstamp.net/api/v2/ticker/btcusd/", timeout=10)
-    data = r.json()
-    price = float(data["last"])
-    open_ = float(data["open"])
+def fetch_with_bybit():
+    """Bybit REST fallback."""
+    r = requests.get(
+        "https://api.bybit.com/v5/market/tickers"
+        "?category=linear&symbol=BTCUSDT",
+        timeout=10
+    )
+    data = r.json()["result"]["list"][0]
     return {
-        "price": price,
-        "change_pct": ((price - open_) / open_) * 100,
-        "high": float(data["high"]),
-        "low": float(data["low"]),
-        "ok": True
+        "price": float(data["lastPrice"]),
+        "change_pct": float(data["price24hPcnt"]) * 100,
+        "high": float(data["highPrice24h"]),
+        "low": float(data["lowPrice24h"]),
+        "ok": True,
+        "source": "bybit"
     }
-
-def _from_kraken():
-    r = requests.get("https://api.kraken.com/0/public/Ticker?pair=XBTUSD", timeout=10)
-    data = r.json()["result"]["XXBTZUSD"]
-    price = float(data["c"][0])
-    open_ = float(data["o"])
-    return {
-        "price": price,
-        "change_pct": ((price - open_) / open_) * 100,
-        "high": float(data["h"][1]),
-        "low": float(data["l"][1]),
-        "ok": True
-    }
-
-def _from_coinbase():
-    r = requests.get("https://api.coinbase.com/v2/prices/BTC-USD/spot", timeout=10)
-    price = float(r.json()["data"]["amount"])
-    return {"price": price, "change_pct": 0, "high": 0, "low": 0, "ok": True}
 
 def fetch_btc_price():
-    apis = [_from_gemini, _from_bitstamp, _from_kraken, _from_coinbase]
-    for i, api in enumerate(apis):
-        try:
-            result = api()
-            st.session_state["price_cache"] = result  # save as fallback only
+    """
+    No caching — fresh API call on every rerun.
+    Falls back to last known price only if all sources fail.
+    Order: CCXT (OKX/KuCoin/Gate/HTX) → CoinGecko → Bybit → last known
+    """
+    # 1. Try CCXT exchanges
+    try:
+        result = fetch_with_ccxt()
+        if result:
+            st.session_state["price_cache"] = result
             return result
-        except Exception:
-            if i < len(apis) - 1:
-                time.sleep(0.5)
-    # All APIs failed — return last known price instead of $0
+    except Exception:
+        pass
+
+    # 2. CoinGecko
+    try:
+        result = fetch_with_coingecko()
+        st.session_state["price_cache"] = result
+        return result
+    except Exception:
+        pass
+
+    # 3. Bybit
+    try:
+        result = fetch_with_bybit()
+        st.session_state["price_cache"] = result
+        return result
+    except Exception:
+        pass
+
+    # 4. All failed — return last known price
     return st.session_state.get("price_cache",
-           {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False})
+           {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False, "source": "none"})
 
 # ==========================================
 # STORAGE
@@ -280,7 +318,7 @@ def color_val(v):
     return "color:#00e676" if v >= 0 else "color:#ff1744"
 
 # ==========================================
-# AUTO REFRESH (no page reload)
+# AUTO REFRESH
 # ==========================================
 
 refresh_interval = st.sidebar.selectbox(
@@ -320,9 +358,13 @@ with col_high:
 with col_low:
     st.markdown(f'<div class="stat-label">24h Low</div><div class="stat-value" style="color:#fff">${price_data["low"]:,.1f}</div>', unsafe_allow_html=True)
 with col_refresh:
-    if st.button("🔄", help="Refresh price"):
+    if st.button("🔄", help="Force refresh price"):
         st.session_state.pop("price_cache", None)
         st.rerun()
+
+# Show which source is being used (helpful for debugging)
+source = price_data.get("source", "—")
+st.caption(f"Price source: {source}")
 
 st.markdown("---")
 
@@ -592,5 +634,6 @@ with st.expander(form_title, expanded=(editing_idx is not None or not orders)):
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(f"**BTC Price:** ${cp:,.1f}")
+st.sidebar.markdown(f"**Source:** {price_data.get('source', '—')}")
 st.sidebar.markdown(f"**Open Positions:** {len(orders)}")
 st.sidebar.markdown(f"**Last Update:** {datetime.datetime.now().strftime('%H:%M:%S')}")
