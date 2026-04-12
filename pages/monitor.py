@@ -37,6 +37,9 @@ ACCOUNT_GROUP = {
 
 st.markdown("""
 <style>
+div.stButton > button {
+    white-space: nowrap;
+}
 .monitor-card {
     background: #1a1a2e;
     border: 1px solid #2a2a4a;
