@@ -6,6 +6,8 @@ import os
 import datetime
 import re
 from github import Github
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from auth import check_password
 
 if not check_password():
