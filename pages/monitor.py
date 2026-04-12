@@ -39,6 +39,9 @@ st.markdown("""
 <style>
 div.stButton > button {
     white-space: nowrap;
+    padding-left: 16px;
+    padding-right: 16px;
+    height: auto;
 }
 .monitor-card {
     background: #1a1a2e;
@@ -524,7 +527,7 @@ with st.expander(form_title, expanded=(editing_idx is not None or not orders)):
                                    step=0.1, key="form_sl")
         sl_val = sl_input if sl_input > 0 else None
 
-    btn_col1, btn_col2 = st.columns([1, 6])
+    btn_col1, btn_col2 = st.columns([2, 5])
     with btn_col1:
         submit_label = "💾 Update" if editing_idx is not None else "✅ Add Position"
         if st.button(submit_label, use_container_width=True):
