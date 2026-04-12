@@ -165,7 +165,7 @@ def _from_coinbase():
     price = float(r.json()["data"]["amount"])
     return {"price": price, "change_pct": 0, "high": 0, "low": 0, "ok": True}
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=15)
 def fetch_btc_price():
     apis = [
         _from_gemini,    # most stable on AWS
