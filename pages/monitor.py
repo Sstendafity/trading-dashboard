@@ -118,7 +118,10 @@ div.stButton > button {
 """, unsafe_allow_html=True)
 
 # ==========================================
-# PRICE FETCHING — 4 stable fallbacks
+# PRICE FETCHING
+# — No @st.cache_data, uses session_state
+#   with a manual 25s TTL so every
+#   autorefresh (30s) gets a fresh price
 # ==========================================
 
 def _from_gemini():
@@ -165,21 +168,30 @@ def _from_coinbase():
     price = float(r.json()["data"]["amount"])
     return {"price": price, "change_pct": 0, "high": 0, "low": 0, "ok": True}
 
-# NO @st.cache_data — use session_state so price updates on every autorefresh rerun
-@st.cache_data(ttl=15)
 def fetch_btc_price():
+    now = datetime.datetime.now()
+    last_fetched = st.session_state.get("price_last_fetched")
+    cached = st.session_state.get("price_cache")
+
+    # Return cached value if fetched within last 25 seconds
+    if cached and last_fetched and (now - last_fetched).total_seconds() < 25:
+        return cached
+
+    # Otherwise fetch fresh from APIs
     apis = [_from_gemini, _from_bitstamp, _from_kraken, _from_coinbase]
     for i, api in enumerate(apis):
         try:
             result = api()
-            st.session_state["last_price"] = result  # store for display if next fetch fails
+            # Store in session_state
+            st.session_state["price_cache"] = result
+            st.session_state["price_last_fetched"] = now
             return result
         except Exception:
             if i < len(apis) - 1:
                 time.sleep(1)
-    # All failed — return last known price if available, otherwise zeros
-    return st.session_state.get("last_price", 
-           {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False})
+
+    # All failed — return last known price to avoid showing $0
+    return cached or {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False}
 
 # ==========================================
 # STORAGE
@@ -279,7 +291,7 @@ def color_val(v):
     return "color:#00e676" if v >= 0 else "color:#ff1744"
 
 # ==========================================
-# AUTO REFRESH (sidebar — no page reload)
+# AUTO REFRESH (no page reload)
 # ==========================================
 
 refresh_interval = st.sidebar.selectbox(
@@ -319,8 +331,10 @@ with col_high:
 with col_low:
     st.markdown(f'<div class="stat-label">24h Low</div><div class="stat-value" style="color:#fff">${price_data["low"]:,.1f}</div>', unsafe_allow_html=True)
 with col_refresh:
-    if st.button("🔄", help="Refresh price"):
-        st.cache_data.clear()
+    if st.button("🔄", help="Force refresh price"):
+        # Clear session_state cache to force immediate fresh API call
+        st.session_state.pop("price_cache", None)
+        st.session_state.pop("price_last_fetched", None)
         st.rerun()
 
 st.markdown("---")
