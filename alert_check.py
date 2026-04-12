@@ -244,6 +244,8 @@ def build_report_msg(orders, current_price):
     now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
     total_usd = 0
+    total_profit = 0
+    total_loss = 0
     total_inr = 0
     profit_count = 0
     loss_count = 0
@@ -257,8 +259,10 @@ def build_report_msg(orders, current_price):
         total_inr += running_inr
         if running_inr > 0:
             profit_count += 1
+            total_profit += running_inr
         elif running_inr < 0:
             loss_count += 1
+            total_loss += running_inr
         order_pnls.append((o, running_usd, running_inr))
 
     # Sort highest profit to lowest loss
@@ -286,11 +290,12 @@ def build_report_msg(orders, current_price):
     msg += "\n".join(lines)
     msg += (
         f"\n━━━━━━━━━━━━━━━━━━\n"
-        f"{total_emoji} <b>Net Running P&L</b>\n"
+        f"{total_emoji} <b>Net Running P&L</b>: "
         f"   <code>{total_sign}₹{total_inr:,.0f}</code> "
         f"(<code>{total_sign}${total_usd:,.2f}</code>)\n"
-        f"✅ Profit: {profit_count} | ❌ Loss: {loss_count} | "
-        f"📋 Total: {len(orders)}"
+        f"✅ Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
+        f"❌ Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
+        f"📋 Total Orders: {len(orders)}"
     )
     return msg
 
