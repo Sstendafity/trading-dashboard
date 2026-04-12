@@ -240,7 +240,7 @@ def build_liq_alert_msg(order, current_price):
     return msg
 
 def build_report_msg(orders, current_price):
-    """Overall portfolio report sent every 30 minutes."""
+    """Overall portfolio report sent every 15 minutes."""
     now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
     total_usd = 0
@@ -277,7 +277,7 @@ def build_report_msg(orders, current_price):
     total_emoji = "📈" if total_inr >= 0 else "📉"
 
     msg = (
-        f"📊 <b>30-MIN PORTFOLIO REPORT</b>\n"
+        f"📊 <b>15-MIN PORTFOLIO REPORT</b>\n"
         f"━━━━━━━━━━━━━━━━━━\n"
         f"🕐 {now}\n"
         f"₿ BTC Price: <code>${current_price:,.1f}</code>\n"
@@ -377,7 +377,7 @@ def main():
                 print(f"↩️  {order.get('account')} liq alert reset")
 
     # ==========================================
-    # 30-MIN PORTFOLIO REPORT
+    # 15-MIN PORTFOLIO REPORT
     # ==========================================
 
     now = datetime.datetime.utcnow()
