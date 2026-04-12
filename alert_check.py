@@ -25,8 +25,13 @@ except ImportError:
 # CONFIGURATION
 # ==========================================
 
+# CONFIGURATION — replace the chat ID line with:
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+TELEGRAM_CHAT_IDS = [
+    os.environ["TELEGRAM_CHAT_ID"],
+    os.environ.get("TELEGRAM_CHAT_ID_2", ""),  # optional — empty string if not set
+]
+TELEGRAM_CHAT_IDS = [cid for cid in TELEGRAM_CHAT_IDS if cid]  # filter empty
 ORDERS_DB = "running_orders.json"
 ALERT_STATE_DB = "alert_state.json"
 DEFAULT_THRESHOLD_PCT = 3.0
@@ -113,15 +118,25 @@ def save_json(path, data):
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
+# Replace send_telegram function with:
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "HTML"
-    }
-    r = requests.post(url, json=payload, timeout=10)
-    return r.ok
+    success = True
+    for chat_id in TELEGRAM_CHAT_IDS:
+        payload = {
+            "chat_id": chat_id,
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        try:
+            r = requests.post(url, json=payload, timeout=10)
+            if not r.ok:
+                print(f"Failed to send to chat {chat_id}: {r.text}")
+                success = False
+        except Exception as e:
+            print(f"Error sending to chat {chat_id}: {e}")
+            success = False
+    return success
 
 # ==========================================
 # CALCULATIONS
@@ -234,6 +249,8 @@ def build_report_msg(orders, current_price):
     loss_count = 0
     lines = []
 
+    # Calculate P&L for all orders first
+    order_pnls = []
     for o in orders:
         running_usd, running_inr = calc_running_pnl(o, current_price)
         total_usd += running_usd
@@ -242,7 +259,12 @@ def build_report_msg(orders, current_price):
             profit_count += 1
         elif running_inr < 0:
             loss_count += 1
+        order_pnls.append((o, running_usd, running_inr))
 
+    # Sort highest profit to lowest loss
+    order_pnls.sort(key=lambda x: x[2], reverse=True)
+
+    for o, running_usd, running_inr in order_pnls:
         side_emoji = "🟢" if o.get("side") == "Buy" else "🔴"
         pnl_sign = "+" if running_inr >= 0 else ""
         lines.append(
