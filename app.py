@@ -12,8 +12,8 @@ from auth import check_password
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide")
 
-if not check_password():
-    st.stop()  # Stop rendering the rest of the app
+# if not check_password():
+#     st.stop()  # Stop rendering the rest of the app
 
 MASTER_DB = "trade_history.csv"
 

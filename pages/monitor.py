@@ -10,8 +10,8 @@ import sys
 sys.path.insert(0, os.getcwd())
 from auth import check_password
 
-if not check_password():
-    st.stop()
+# if not check_password():
+#     st.stop()
 
 # ==========================================
 # CONFIGURATION
