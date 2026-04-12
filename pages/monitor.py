@@ -6,6 +6,10 @@ import os
 import datetime
 import re
 from github import Github
+from auth import check_password
+
+if not check_password():
+    st.stop()  # Stop rendering the rest of the app
 
 # ==========================================
 # CONFIGURATION
