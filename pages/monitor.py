@@ -121,7 +121,7 @@ div.stButton > button {
 # PRICE FETCHING
 # ==========================================
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=60)
 def fetch_btc_price():
     # Try CoinGecko first (works on Streamlit Cloud)
     try:
