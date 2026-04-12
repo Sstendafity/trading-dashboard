@@ -11,8 +11,8 @@ sys.path.insert(0, os.getcwd())
 from auth import check_password
 from streamlit_autorefresh import st_autorefresh
 
-if not check_password():
-    st.stop()
+# if not check_password():
+#     st.stop()
 
 # ==========================================
 # CONFIGURATION
