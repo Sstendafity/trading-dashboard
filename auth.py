@@ -3,7 +3,7 @@ import datetime
 
 # --- LOGIN GATEKEEPER ---
 # Define how many minutes of inactivity trigger a logout
-SESSION_TIMEOUT_MINUTES = 5 
+SESSION_TIMEOUT_MINUTES = 15 
 
 def check_password():
     """Returns `True` if the user entered the correct password and session is valid."""
