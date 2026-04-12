@@ -7,11 +7,11 @@ import datetime
 import re
 from github import Github
 import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.getcwd())
 from auth import check_password
 
 if not check_password():
-    st.stop()  # Stop rendering the rest of the app
+    st.stop()
 
 # ==========================================
 # CONFIGURATION
@@ -115,19 +115,39 @@ st.markdown("""
 # PRICE FETCHING
 # ==========================================
 
-@st.cache_data(ttl=30)  # cache for 30 seconds
+@st.cache_data(ttl=30)
 def fetch_btc_price():
+    # Try CoinGecko first (works on Streamlit Cloud)
     try:
         r = requests.get(
-            "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT",
-            timeout=5
+            "https://api.coingecko.com/api/v3/coins/markets"
+            "?vs_currency=usd&ids=bitcoin",
+            timeout=10
         )
-        data = r.json()
+        data = r.json()[0]
+        return {
+            "price": float(data["current_price"]),
+            "change_pct": float(data["price_change_percentage_24h"] or 0),
+            "high": float(data["high_24h"]),
+            "low": float(data["low_24h"]),
+            "ok": True
+        }
+    except Exception:
+        pass
+
+    # Fallback: Bybit (also works on Streamlit Cloud)
+    try:
+        r = requests.get(
+            "https://api.bybit.com/v5/market/tickers"
+            "?category=linear&symbol=BTCUSDT",
+            timeout=10
+        )
+        data = r.json()["result"]["list"][0]
         return {
             "price": float(data["lastPrice"]),
-            "change_pct": float(data["priceChangePercent"]),
-            "high": float(data["highPrice"]),
-            "low": float(data["lowPrice"]),
+            "change_pct": float(data["price24hPcnt"]) * 100,
+            "high": float(data["highPrice24h"]),
+            "low": float(data["lowPrice24h"]),
             "ok": True
         }
     except Exception:
@@ -178,8 +198,8 @@ def calculate(order, current_price):
 
     if side == "Buy":  # Long
         ep_cp_diff = cp - entry
-        liq_danger = (cp - liq) if liq else None         # how far current is from liquidation
-        ep_liq_diff = (entry - liq) if liq else None     # total distance entry → liquidation
+        liq_danger = (cp - liq) if liq else None
+        ep_liq_diff = (entry - liq) if liq else None
         ep_tg_diff = (tg - entry) if tg else None
         ep_sl_diff = (entry - sl) if sl else None
     else:  # Short/Sell
@@ -204,7 +224,7 @@ def calculate(order, current_price):
     # Danger level: how close current price is to liquidation (as % of ep→liq distance)
     danger_pct = None
     if liq_danger is not None and ep_liq_diff and ep_liq_diff != 0:
-        danger_pct = (1 - (liq_danger / ep_liq_diff)) * 100  # 0% = safe, 100% = liquidated
+        danger_pct = (1 - (liq_danger / ep_liq_diff)) * 100
 
     return {
         "ep_cp_diff": ep_cp_diff,
@@ -243,7 +263,7 @@ price_data = fetch_btc_price()
 cp = price_data["price"]
 
 if not price_data["ok"]:
-    st.error("⚠️ Could not fetch price from Binance. Check internet connection.")
+    st.error("⚠️ Could not fetch price. Both CoinGecko and Bybit failed.")
     cp = 0
 
 col_price, col_chg, col_high, col_low, col_refresh = st.columns([3, 2, 2, 2, 1])
@@ -320,7 +340,6 @@ if orders:
 
     st.markdown("### 📋 Position Analysis")
 
-    # Sort: loss first (most dangerous), then profit
     sorted_pairs = sorted(
         zip(orders, calcs),
         key=lambda x: x[1]["running_inr"]
@@ -328,9 +347,7 @@ if orders:
 
     table_rows = []
     for o, c in sorted_pairs:
-        side_badge = f'<span class="badge-buy">BUY</span>' if o["side"] == "Buy" else f'<span class="badge-sell">SELL</span>'
         danger_str = f"{c['danger_pct']:.0f}% to Liq" if c["danger_pct"] is not None else "—"
-        danger_color = "#ff1744" if (c["danger_pct"] or 0) >= 70 else ("#ffa726" if (c["danger_pct"] or 0) >= 40 else "#69f0ae")
 
         table_rows.append({
             "Account": o["account"],
@@ -371,7 +388,6 @@ if orders:
 if orders:
     st.markdown("### 🗂️ Position Cards")
 
-    # Filter
     filter_col1, filter_col2, filter_col3 = st.columns(3)
     with filter_col1:
         filter_side = st.selectbox("Filter Side", ["All", "Buy", "Sell"])
@@ -391,9 +407,7 @@ if orders:
         st.info("No positions match the filter.")
 
     for i, (o, c) in enumerate(filtered):
-        run_color = "#00e676" if c["running_inr"] >= 0 else "#ff1744"
         side_label = "BUY / LONG" if o["side"] == "Buy" else "SELL / SHORT"
-        side_color = "#00e676" if o["side"] == "Buy" else "#ff1744"
         danger_pct = c["danger_pct"] or 0
 
         with st.expander(
@@ -418,7 +432,6 @@ if orders:
                     st.markdown(f'<div class="stat-label">Liquidation Price</div><div class="stat-value" style="color:#ff6b6b">${liq:,.1f}</div>', unsafe_allow_html=True)
                     st.markdown(f'<div class="stat-label">CP × Liq Distance</div><div class="stat-value">${abs(c["liq_danger"]):,.1f}</div>', unsafe_allow_html=True)
                     st.markdown(f'<div class="stat-label">Liq Loss (INR)</div><div class="stat-value" style="color:#ff1744">{fmt_inr(c["liq_loss_inr"])}</div>', unsafe_allow_html=True)
-                    # Danger bar
                     bar_pct = min(danger_pct, 100)
                     bar_color = "#ff1744" if bar_pct >= 70 else ("#ffa726" if bar_pct >= 40 else "#00e676")
                     st.markdown(f"""
@@ -443,7 +456,6 @@ if orders:
                     st.markdown(f'<div class="stat-label">Stop Loss (SL)</div><div class="stat-value" style="color:#ffa726">${sl:,.1f}</div>', unsafe_allow_html=True)
                     st.markdown(f'<div class="stat-label">Loss at SL (INR)</div><div class="stat-value" style="color:#ff1744">{fmt_inr(c["loss_inr"])}</div>', unsafe_allow_html=True)
 
-            # Edit / Delete buttons
             st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
             btn1, btn2, _ = st.columns([1, 1, 5])
             with btn1:
@@ -467,7 +479,6 @@ editing_idx = st.session_state.get("editing_idx", None)
 form_title = "✏️ Edit Position" if editing_idx is not None else "➕ Add New Position"
 
 with st.expander(form_title, expanded=(editing_idx is not None or not orders)):
-    # Pre-fill if editing
     default = {}
     if editing_idx is not None and editing_idx < len(orders):
         default = orders[editing_idx]
@@ -484,8 +495,8 @@ with st.expander(form_title, expanded=(editing_idx is not None or not orders)):
         entry = st.number_input("Entry Price (USD)", min_value=0.0, value=float(default.get("entry_price", 0) or 0), step=0.1, key="form_entry")
         qty = st.number_input("Quantity (BTC)", min_value=0.0, value=float(default.get("qty", 0) or 0), step=0.001, format="%.4f", key="form_qty")
         threshold = st.number_input(
-            "Alert Threshold (%)", 
-            min_value=0.5, max_value=20.0, 
+            "Alert Threshold (%)",
+            min_value=0.5, max_value=20.0,
             value=float(default.get("alert_threshold", 3.0)),
             step=0.5, key="form_threshold"
         )

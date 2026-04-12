@@ -15,19 +15,32 @@ import requests
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 ORDERS_DB = "running_orders.json"
-ALERT_STATE_DB = "alert_state.json"   # tracks which alerts already fired (to avoid spam)
-DEFAULT_THRESHOLD_PCT = 3.0           # alert when price moves 3% against entry
+ALERT_STATE_DB = "alert_state.json"
+DEFAULT_THRESHOLD_PCT = 3.0
 
 # ==========================================
 # HELPERS
 # ==========================================
 
 def fetch_btc_price():
+    # Try CoinGecko first
+    try:
+        r = requests.get(
+            "https://api.coingecko.com/api/v3/coins/markets"
+            "?vs_currency=usd&ids=bitcoin",
+            timeout=10
+        )
+        return float(r.json()[0]["current_price"])
+    except Exception:
+        pass
+
+    # Fallback: Bybit
     r = requests.get(
-        "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
+        "https://api.bybit.com/v5/market/tickers"
+        "?category=linear&symbol=BTCUSDT",
         timeout=10
     )
-    return float(r.json()["price"])
+    return float(r.json()["result"]["list"][0]["lastPrice"])
 
 def load_json(path, default):
     if os.path.exists(path):
@@ -140,23 +153,18 @@ def main():
         print("No open positions found.")
         return
 
-    # alert_state tracks which positions have already been alerted
-    # key = unique position id (account + entry + side), value = True/False
     alert_state = load_json(ALERT_STATE_DB, {})
     state_changed = False
-
     alerts_sent = 0
     alerts_recovered = 0
 
     for order in orders:
-        # Build a stable key for this position
         key = f"{order.get('account')}_{order.get('side')}_{order.get('entry_price')}_{order.get('qty')}"
 
         should_alert, move_pct, direction = check_position(order, current_price)
         already_alerted = alert_state.get(key, False)
 
         if should_alert and not already_alerted:
-            # New alert — fire it
             msg = build_alert_message(order, current_price, move_pct, direction)
             success = send_telegram(msg)
             if success:
@@ -168,7 +176,6 @@ def main():
                 print(f"❌ Failed to send alert for {order.get('account')}")
 
         elif not should_alert and already_alerted:
-            # Position recovered — reset so next breach triggers again
             alert_state[key] = False
             state_changed = True
             alerts_recovered += 1
