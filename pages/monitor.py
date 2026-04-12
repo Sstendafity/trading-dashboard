@@ -4,14 +4,15 @@ import requests
 import json
 import os
 import datetime
-import re
+import time
 from github import Github
 import sys
 sys.path.insert(0, os.getcwd())
 from auth import check_password
+from streamlit_autorefresh import st_autorefresh
 
-# if not check_password():
-#     st.stop()
+if not check_password():
+    st.stop()
 
 # ==========================================
 # CONFIGURATION
@@ -23,7 +24,6 @@ USD_TO_INR = 85.0
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"] if "GITHUB_TOKEN" in st.secrets else None
 REPO_NAME = "Sstendafity/trading-dashboard"
 
-EXCHANGES = ["Delta", "CS", "Pi42", "CDX", "MDX", "ZEP"]
 ACCOUNTS = [f"A-{i}" for i in range(1, 16)]
 ACCOUNT_GROUP = {
     "A-1": "Delta", "A-2": "Delta", "A-3": "Delta", "A-4": "Delta", "A-5": "Delta", "A-6": "Delta",
@@ -37,12 +37,6 @@ ACCOUNT_GROUP = {
 
 st.markdown("""
 <style>
-div.stButton > button {
-    white-space: nowrap;
-    padding-left: 16px;
-    padding-right: 16px;
-    height: auto;
-}
 .monitor-card {
     background: #1a1a2e;
     border: 1px solid #2a2a4a;
@@ -114,50 +108,78 @@ div.stButton > button {
     text-align: center;
 }
 .divider { border-top: 1px solid #2a2a4a; margin: 8px 0; }
+div.stButton > button {
+    white-space: nowrap;
+    padding-left: 16px;
+    padding-right: 16px;
+    height: auto;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# PRICE FETCHING
+# PRICE FETCHING — 4 stable fallbacks
 # ==========================================
+
+def _from_gemini():
+    r = requests.get("https://api.gemini.com/v2/ticker/btcusd", timeout=10)
+    data = r.json()
+    price = float(data["close"])
+    open_ = float(data["open"])
+    return {
+        "price": price,
+        "change_pct": ((price - open_) / open_) * 100,
+        "high": float(data["high"]),
+        "low": float(data["low"]),
+        "ok": True
+    }
+
+def _from_bitstamp():
+    r = requests.get("https://www.bitstamp.net/api/v2/ticker/btcusd/", timeout=10)
+    data = r.json()
+    price = float(data["last"])
+    open_ = float(data["open"])
+    return {
+        "price": price,
+        "change_pct": ((price - open_) / open_) * 100,
+        "high": float(data["high"]),
+        "low": float(data["low"]),
+        "ok": True
+    }
+
+def _from_kraken():
+    r = requests.get("https://api.kraken.com/0/public/Ticker?pair=XBTUSD", timeout=10)
+    data = r.json()["result"]["XXBTZUSD"]
+    price = float(data["c"][0])
+    open_ = float(data["o"])
+    return {
+        "price": price,
+        "change_pct": ((price - open_) / open_) * 100,
+        "high": float(data["h"][1]),
+        "low": float(data["l"][1]),
+        "ok": True
+    }
+
+def _from_coinbase():
+    r = requests.get("https://api.coinbase.com/v2/prices/BTC-USD/spot", timeout=10)
+    price = float(r.json()["data"]["amount"])
+    return {"price": price, "change_pct": 0, "high": 0, "low": 0, "ok": True}
 
 @st.cache_data(ttl=60)
 def fetch_btc_price():
-    # Try CoinGecko first (works on Streamlit Cloud)
-    try:
-        r = requests.get(
-            "https://api.coingecko.com/api/v3/coins/markets"
-            "?vs_currency=usd&ids=bitcoin",
-            timeout=10
-        )
-        data = r.json()[0]
-        return {
-            "price": float(data["current_price"]),
-            "change_pct": float(data["price_change_percentage_24h"] or 0),
-            "high": float(data["high_24h"]),
-            "low": float(data["low_24h"]),
-            "ok": True
-        }
-    except Exception:
-        pass
-
-    # Fallback: Bybit (also works on Streamlit Cloud)
-    try:
-        r = requests.get(
-            "https://api.bybit.com/v5/market/tickers"
-            "?category=linear&symbol=BTCUSDT",
-            timeout=10
-        )
-        data = r.json()["result"]["list"][0]
-        return {
-            "price": float(data["lastPrice"]),
-            "change_pct": float(data["price24hPcnt"]) * 100,
-            "high": float(data["highPrice24h"]),
-            "low": float(data["lowPrice24h"]),
-            "ok": True
-        }
-    except Exception:
-        return {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False}
+    apis = [
+        _from_gemini,    # most stable on AWS
+        _from_bitstamp,  # second most stable
+        _from_kraken,    # third
+        _from_coinbase,  # price only fallback
+    ]
+    for i, api in enumerate(apis):
+        try:
+            return api()
+        except Exception:
+            if i < len(apis) - 1:
+                time.sleep(1)
+    return {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False}
 
 # ==========================================
 # STORAGE
@@ -175,7 +197,6 @@ def load_orders():
 def save_orders(orders):
     with open(ORDERS_DB, "w") as f:
         json.dump(orders, f, indent=2)
-    # Sync to GitHub
     if GITHUB_TOKEN:
         try:
             g = Github(GITHUB_TOKEN)
@@ -202,13 +223,13 @@ def calculate(order, current_price):
     sl = order.get("stop_loss", None)
     cp = current_price
 
-    if side == "Buy":  # Long
+    if side == "Buy":
         ep_cp_diff = cp - entry
         liq_danger = (cp - liq) if liq else None
         ep_liq_diff = (entry - liq) if liq else None
         ep_tg_diff = (tg - entry) if tg else None
         ep_sl_diff = (entry - sl) if sl else None
-    else:  # Short/Sell
+    else:
         ep_cp_diff = entry - cp
         liq_danger = (liq - cp) if liq else None
         ep_liq_diff = (liq - entry) if liq else None
@@ -227,7 +248,6 @@ def calculate(order, current_price):
     loss_usd = (ep_sl_diff * qty) if ep_sl_diff is not None else None
     loss_inr = (loss_usd * USD_TO_INR) if loss_usd is not None else None
 
-    # Danger level: how close current price is to liquidation (as % of ep→liq distance)
     danger_pct = None
     if liq_danger is not None and ep_liq_diff and ep_liq_diff != 0:
         danger_pct = (1 - (liq_danger / ep_liq_diff)) * 100
@@ -259,6 +279,19 @@ def color_val(v):
     return "color:#00e676" if v >= 0 else "color:#ff1744"
 
 # ==========================================
+# AUTO REFRESH (sidebar — no page reload)
+# ==========================================
+
+refresh_interval = st.sidebar.selectbox(
+    "Auto Refresh", ["Off", "30s", "1 min", "5 min"],
+    index=0
+)
+refresh_ms = {"30s": 30_000, "1 min": 60_000, "5 min": 300_000}
+if refresh_interval != "Off":
+    st_autorefresh(interval=refresh_ms[refresh_interval], key="price_refresh")
+    st.sidebar.caption(f"Refreshing every {refresh_interval}")
+
+# ==========================================
 # MAIN PAGE
 # ==========================================
 
@@ -269,7 +302,7 @@ price_data = fetch_btc_price()
 cp = price_data["price"]
 
 if not price_data["ok"]:
-    st.error("⚠️ Could not fetch price. Both CoinGecko and Bybit failed.")
+    st.error("⚠️ Could not fetch price. All sources failed — try refreshing.")
     cp = 0
 
 col_price, col_chg, col_high, col_low, col_refresh = st.columns([3, 2, 2, 2, 1])
@@ -292,7 +325,6 @@ with col_refresh:
 
 st.markdown("---")
 
-# Load orders
 orders = load_orders()
 
 # ==========================================
@@ -308,12 +340,10 @@ if orders:
     buy_qty = sum(o.get("qty", 0) or 0 for o in orders if o.get("side") == "Buy")
     sell_qty = sum(o.get("qty", 0) or 0 for o in orders if o.get("side") == "Sell")
 
-    # Danger alerts
     danger_orders = [
         (o, c) for o, c in zip(orders, calcs)
         if c["danger_pct"] is not None and c["danger_pct"] >= 70
     ]
-
     if danger_orders:
         for o, c in danger_orders:
             st.markdown(f"""
@@ -330,7 +360,6 @@ if orders:
         return f'<div class="summary-box"><div class="stat-label">{label}</div><div class="stat-value" style="color:{color}">{value}</div></div>'
 
     net_color = "#00e676" if total_running_inr >= 0 else "#ff1744"
-
     with s1: st.markdown(summary_box("Net Running P&L", fmt_inr(total_running_inr), net_color), unsafe_allow_html=True)
     with s2: st.markdown(summary_box("Profit Positions", len(profit_orders), "#00e676"), unsafe_allow_html=True)
     with s3: st.markdown(summary_box("Loss Positions", len(loss_orders), "#ff1744"), unsafe_allow_html=True)
@@ -346,15 +375,11 @@ if orders:
 
     st.markdown("### 📋 Position Analysis")
 
-    sorted_pairs = sorted(
-        zip(orders, calcs),
-        key=lambda x: x[1]["running_inr"]
-    )
+    sorted_pairs = sorted(zip(orders, calcs), key=lambda x: x[1]["running_inr"])
 
     table_rows = []
     for o, c in sorted_pairs:
         danger_str = f"{c['danger_pct']:.0f}% to Liq" if c["danger_pct"] is not None else "—"
-
         table_rows.append({
             "Account": o["account"],
             "Exchange": ACCOUNT_GROUP.get(o["account"], "—"),
@@ -384,11 +409,10 @@ if orders:
         return df.style.map(color_cells, subset=["Run P&L (USD)", "Run P&L (INR)", "Profit (INR)", "Loss (INR)", "Liq Loss (INR)"])
 
     st.dataframe(style_table(table_df), use_container_width=True, hide_index=True)
-
     st.markdown("---")
 
 # ==========================================
-# POSITION CARDS (DETAILED VIEW)
+# POSITION CARDS
 # ==========================================
 
 if orders:
@@ -463,7 +487,7 @@ if orders:
                     st.markdown(f'<div class="stat-label">Loss at SL (INR)</div><div class="stat-value" style="color:#ff1744">{fmt_inr(c["loss_inr"])}</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-            btn1, btn2, _ = st.columns([1, 1, 5])
+            btn1, btn2, _ = st.columns([2, 2, 5])
             with btn1:
                 if st.button("✏️ Edit", key=f"edit_{i}"):
                     st.session_state["editing_idx"] = orders.index(o)
@@ -562,20 +586,8 @@ with st.expander(form_title, expanded=(editing_idx is not None or not orders)):
                 st.rerun()
 
 # ==========================================
-# AUTO REFRESH
+# SIDEBAR INFO
 # ==========================================
-
-from streamlit_autorefresh import st_autorefresh
-
-refresh_interval = st.sidebar.selectbox(
-    "Auto Refresh", ["Off", "30s", "1 min", "5 min"],
-    index=0  # default to Off — safer
-)
-refresh_ms = {"30s": 30_000, "1 min": 60_000, "5 min": 300_000}
-
-if refresh_interval != "Off":
-    st_autorefresh(interval=refresh_ms[refresh_interval], key="price_refresh")
-    st.sidebar.caption(f"Refreshing every {refresh_interval}")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(f"**BTC Price:** ${cp:,.1f}")
