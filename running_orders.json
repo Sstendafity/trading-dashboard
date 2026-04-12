@@ -1,0 +1,13 @@
+[
+  {
+    "account": "A-1",
+    "side": "Sell",
+    "entry_price": 71577.0,
+    "qty": 0.01,
+    "liquidation": 79282.0,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-04-12 02:21:09.831990",
+    "alert_threshold": 3.0
+  }
+]
