@@ -198,6 +198,7 @@ def build_pct_alert_msg(order, current_price, move_pct, direction):
         f"━━━━━━━━━━━━━━━━━━\n"
         f"{side_emoji} <b>{side.upper()} / {'LONG' if side == 'Buy' else 'SHORT'}</b>\n"
         f"📍 Entry Price:   <code>${entry:,.1f}</code>\n"
+        f"⚖️ Quantity:      <code>{qty}</code>\n"
         f"📊 Current Price: <code>${current_price:,.1f}</code>\n"
         f"📉 Move Against:  <code>{move_pct:.2f}%</code> (threshold: {threshold}%)\n"
         f"💰 Running P&L:   <code>{pnl_sign}₹{running_inr:,.0f}</code> "
@@ -230,6 +231,7 @@ def build_liq_alert_msg(order, current_price):
         f"━━━━━━━━━━━━━━━━━━\n"
         f"{side_emoji} <b>{side.upper()} / {'LONG' if side == 'Buy' else 'SHORT'}</b>\n"
         f"📍 Entry Price:   <code>${entry:,.1f}</code>\n"
+        f"⚖️ Quantity:      <code>{qty}</code>\n"
         f"📊 Current Price: <code>${current_price:,.1f}</code>\n"
         f"💀 Liq Price:     <code>${liq:,.1f}</code>\n"
         f"💸 Est. Loss:     <code>-₹{abs(running_inr):,.0f}</code> "
@@ -249,6 +251,8 @@ def build_report_msg(orders, current_price):
     total_inr = 0
     profit_count = 0
     loss_count = 0
+    buy_qty = 0
+    sell_qty = 0
     lines = []
 
     # Calculate P&L for all orders first
@@ -264,6 +268,10 @@ def build_report_msg(orders, current_price):
             loss_count += 1
             total_loss += running_inr
         order_pnls.append((o, running_usd, running_inr))
+        if o.get("side") == "Buy":
+            buy_qty += o.get("qty", 0) or 0
+        else:
+            sell_qty += o.get("qty", 0) or 0
 
     # Sort highest profit to lowest loss
     order_pnls.sort(key=lambda x: x[2], reverse=True)
@@ -273,7 +281,7 @@ def build_report_msg(orders, current_price):
         pnl_sign = "+" if running_inr >= 0 else ""
         lines.append(
             f"  {side_emoji} <b>{o.get('account')}</b> "
-            f"({o.get('side')}) @ ${o.get('entry_price', 0):,.1f} "
+            f"({o.get('side')}) @ ${o.get('entry_price', 0):,.1f} | Qty: {o.get('qty', 0)}) "
             f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
         )
 
@@ -295,7 +303,9 @@ def build_report_msg(orders, current_price):
         f"(<code>{total_sign}${total_usd:,.2f}</code>)\n"
         f"✅ Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
         f"❌ Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
-        f"📋 Total Orders: {len(orders)}"
+        f"📋 Total Orders: {len(orders)}\n"
+        f"📦 Buy Qty: {buy_qty}\n"
+        f"📦 Sell Qty: {sell_qty}\n"
     )
     return msg
 
