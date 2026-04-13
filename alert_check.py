@@ -281,7 +281,7 @@ def build_report_msg(orders, current_price):
         pnl_sign = "+" if running_inr >= 0 else ""
         lines.append(
             f"  {side_emoji} <b>{o.get('account')}</b> "
-            f"({o.get('side')}) @ ${o.get('entry_price', 0):,.1f} | Qty: {o.get('qty', 0)}) "
+            f"@ ${o.get('entry_price', 0):,.1f} | {o.get('qty', 0)} "
             f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
         )
 
