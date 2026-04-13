@@ -317,7 +317,7 @@ def build_report_msg(orders, current_price):
         f"📋 Total Orders: {len(orders)}\n"
         f"📦 Buy Qty: {btc_to_lots(buy_qty)} lots\n"
         f"📦 Sell Qty: {btc_to_lots(sell_qty)} lots\n"
-        f"⚪ <b>Idle Accounts ({len(inactive_accounts)})</b>: {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
+        f"⚪ Idle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
     )
     return msg
 
