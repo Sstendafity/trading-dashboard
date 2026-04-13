@@ -36,7 +36,7 @@ ORDERS_DB = "running_orders.json"
 ALERT_STATE_DB = "alert_state.json"
 DEFAULT_THRESHOLD_PCT = 3.0
 USD_TO_INR = 85.0
-REPORT_INTERVAL_MINUTES = 15
+REPORT_INTERVAL_MINUTES = 13
 
 # ==========================================
 # PRICE FETCHING — CCXT + REST fallbacks
