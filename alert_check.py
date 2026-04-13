@@ -304,7 +304,7 @@ def build_report_msg(orders, current_price):
     msg += (
         f"\n━━━━━━━━━━━━━━━━━━\n"
         f"{total_emoji} <b>Net Running P&L</b>: "
-        f"   <code>{total_sign}₹{total_inr:,.0f}</code> "
+        f"<code>{total_sign}₹{total_inr:,.0f}</code> "
         f"(<code>{total_sign}${total_usd:,.2f}</code>)\n"
         f"✅ Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
         f"❌ Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
