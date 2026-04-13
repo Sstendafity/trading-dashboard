@@ -262,6 +262,12 @@ def build_report_msg(orders, current_price):
 
     # Calculate P&L for all orders first
     order_pnls = []
+    # Add this after order_pnls is built, before the msg assembly
+
+    ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 16)]
+    active_accounts = {o.get("account") for o in orders}
+    inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
+
     for o in orders:
         running_usd, running_inr = calc_running_pnl(o, current_price)
         total_usd += running_usd
@@ -311,6 +317,7 @@ def build_report_msg(orders, current_price):
         f"📋 Total Orders: {len(orders)}\n"
         f"📦 Buy Qty: {btc_to_lots(buy_qty)} lots\n"
         f"📦 Sell Qty: {btc_to_lots(sell_qty)} lots\n"
+        f"⚪ <b>Idle Accounts ({len(inactive_accounts)})</b>: {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
     )
     return msg
 
