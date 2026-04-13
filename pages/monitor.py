@@ -115,19 +115,16 @@ div.stButton > button {
 # ==========================================
 
 def btc_to_lots(btc_qty):
-    """Convert BTC quantity to lots. 0.001 BTC = 1 lot."""
-    return round(btc_qty / LOT_SIZE)
+    return round((btc_qty or 0) / LOT_SIZE)
 
 def lots_to_btc(lots):
-    """Convert lots to BTC quantity. 1 lot = 0.001 BTC."""
     return lots * LOT_SIZE
 
 def fmt_lots(btc_qty):
-    """Display BTC quantity as lots."""
     return f"{btc_to_lots(btc_qty)} lots"
 
 # ==========================================
-# PRICE FETCHING — CCXT with fallbacks
+# PRICE FETCHING
 # ==========================================
 
 def fetch_with_ccxt():
@@ -139,15 +136,11 @@ def fetch_with_ccxt():
                 'enableRateLimit': False,
             })
             ticker = exchange.fetch_ticker('BTC/USDT')
-            price = float(ticker['last'])
-            change_pct = float(ticker['percentage'] or 0)
-            high = float(ticker['high'] or 0)
-            low = float(ticker['low'] or 0)
             return {
-                "price": price,
-                "change_pct": change_pct,
-                "high": high,
-                "low": low,
+                "price": float(ticker['last']),
+                "change_pct": float(ticker['percentage'] or 0),
+                "high": float(ticker['high'] or 0),
+                "low": float(ticker['low'] or 0),
                 "ok": True,
                 "source": exchange_id
             }
@@ -157,8 +150,7 @@ def fetch_with_ccxt():
 
 def fetch_with_coingecko():
     r = requests.get(
-        "https://api.coingecko.com/api/v3/coins/markets"
-        "?vs_currency=usd&ids=bitcoin",
+        "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin",
         timeout=10
     )
     data = r.json()[0]
@@ -173,8 +165,7 @@ def fetch_with_coingecko():
 
 def fetch_with_bybit():
     r = requests.get(
-        "https://api.bybit.com/v5/market/tickers"
-        "?category=linear&symbol=BTCUSDT",
+        "https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT",
         timeout=10
     )
     data = r.json()["result"]["list"][0]
@@ -301,6 +292,9 @@ def color_val(v):
     if v is None: return "color:#888"
     return "color:#00e676" if v >= 0 else "color:#ff1744"
 
+def summary_box(label, value, color="#fff"):
+    return f'<div class="summary-box"><div class="stat-label">{label}</div><div class="stat-value" style="color:{color}">{value}</div></div>'
+
 # ==========================================
 # POPUP DIALOGS
 # ==========================================
@@ -316,17 +310,21 @@ def dialog_add_position(orders):
         lot_qty = st.number_input("Quantity (Lots)", min_value=1, value=1, step=1, key="dlg_qty",
                                   help="1 lot = 0.001 BTC")
         st.caption(f"= {lots_to_btc(lot_qty):.4f} BTC")
-        threshold = st.number_input("Alert Threshold (%)", min_value=0.5, max_value=20.0, value=3.0, step=0.5, key="dlg_threshold")
+        threshold = st.number_input("Alert Threshold (%)", min_value=0.5, max_value=20.0,
+                                    value=3.0, step=0.5, key="dlg_threshold")
     with f3:
-        liq_input = st.number_input("Liquidation Price (optional)", min_value=0.0, value=0.0, step=0.1, key="dlg_liq")
+        liq_input = st.number_input("Liquidation Price (optional)", min_value=0.0,
+                                    value=0.0, step=0.1, key="dlg_liq")
         liq_val = liq_input if liq_input > 0 else None
 
     f4, f5 = st.columns(2)
     with f4:
-        tg_input = st.number_input("Target / TG (optional)", min_value=0.0, value=0.0, step=0.1, key="dlg_tg")
+        tg_input = st.number_input("Target / TG (optional)", min_value=0.0,
+                                   value=0.0, step=0.1, key="dlg_tg")
         tg_val = tg_input if tg_input > 0 else None
     with f5:
-        sl_input = st.number_input("Stop Loss / SL (optional)", min_value=0.0, value=0.0, step=0.1, key="dlg_sl")
+        sl_input = st.number_input("Stop Loss / SL (optional)", min_value=0.0,
+                                   value=0.0, step=0.1, key="dlg_sl")
         sl_val = sl_input if sl_input > 0 else None
 
     if st.button("✅ Add Position", use_container_width=True):
@@ -337,7 +335,7 @@ def dialog_add_position(orders):
                 "account": acc,
                 "side": side,
                 "entry_price": entry,
-                "qty": lots_to_btc(lot_qty),  # store as BTC
+                "qty": lots_to_btc(lot_qty),
                 "liquidation": liq_val,
                 "target": tg_val,
                 "stop_loss": sl_val,
@@ -403,7 +401,7 @@ def dialog_edit_position(orders, idx):
                 "account": acc,
                 "side": side,
                 "entry_price": entry,
-                "qty": lots_to_btc(lot_qty),  # store as BTC
+                "qty": lots_to_btc(lot_qty),
                 "liquidation": liq_val,
                 "target": tg_val,
                 "stop_loss": sl_val,
@@ -415,24 +413,28 @@ def dialog_edit_position(orders, idx):
             st.rerun()
 
 # ==========================================
-# PRICE BAR — Fragment so only price
-# refreshes, dialogs stay open
+# LIVE FRAGMENT
+# Covers: price bar + danger alerts +
+#         summary boxes + analysis table
+# Reruns every 30s independently —
+# dialogs and position cards stay open
 # ==========================================
 
 @st.fragment(run_every=30)
-def price_bar():
+def live_dashboard(orders):
+    # --- Fetch price ---
     result = _do_fetch()
     if result:
         st.session_state["price_cache"] = result
 
     price_data = st.session_state.get("price_cache",
         {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False, "source": "none"})
-
     cp = price_data["price"]
 
     if not price_data.get("ok"):
-        st.error("⚠️ Could not fetch price. All sources failed — try refreshing.")
+        st.error("⚠️ Could not fetch price. All sources failed.")
 
+    # --- Price bar ---
     col_price, col_chg, col_high, col_low, col_refresh = st.columns([3, 2, 2, 2, 1])
     change_color = "price-up" if price_data["change_pct"] >= 0 else "price-down"
     change_arrow = "▲" if price_data["change_pct"] >= 0 else "▼"
@@ -450,47 +452,16 @@ def price_bar():
             st.session_state.pop("price_cache", None)
             st.rerun(scope="fragment")
 
-    st.caption(f"Price source: {price_data.get('source', '—')} · Updated: {datetime.datetime.now().strftime('%H:%M:%S')}")
+    st.caption(f"Source: {price_data.get('source', '—')} · {datetime.datetime.now().strftime('%H:%M:%S')}")
+    st.markdown("---")
 
-# ==========================================
-# SIDEBAR
-# ==========================================
+    if not orders:
+        st.info("👋 No open positions. Add one below.")
+        return
 
-refresh_interval = st.sidebar.selectbox(
-    "Price Refresh", ["30s", "1 min", "5 min", "Off"],
-    index=0
-)
-
-# ==========================================
-# MAIN PAGE
-# ==========================================
-
-st.title("⚡ Live Order Monitor")
-
-price_bar()
-
-# Get current price from session state (set by fragment)
-price_data = st.session_state.get("price_cache",
-    {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False, "source": "none"})
-cp = price_data["price"]
-
-st.markdown("---")
-
-orders = load_orders()
-
-# ==========================================
-# ANALYSIS SUMMARY
-# ==========================================
-
-if orders:
     calcs = [calculate(o, cp) for o in orders]
 
-    total_running_inr = sum(c["running_inr"] for c in calcs)
-    profit_orders = [o for o, c in zip(orders, calcs) if c["running_inr"] > 0]
-    loss_orders = [o for o, c in zip(orders, calcs) if c["running_inr"] < 0]
-    buy_qty = sum(o.get("qty", 0) or 0 for o in orders if o.get("side") == "Buy")
-    sell_qty = sum(o.get("qty", 0) or 0 for o in orders if o.get("side") == "Sell")
-
+    # --- Danger alerts ---
     danger_orders = [
         (o, c) for o, c in zip(orders, calcs)
         if c["danger_pct"] is not None and c["danger_pct"] >= 70
@@ -504,12 +475,15 @@ if orders:
             </div>
             """, unsafe_allow_html=True)
 
+    # --- Summary boxes ---
+    total_running_inr = sum(c["running_inr"] for c in calcs)
+    profit_orders = [o for o, c in zip(orders, calcs) if c["running_inr"] > 0]
+    loss_orders = [o for o, c in zip(orders, calcs) if c["running_inr"] < 0]
+    buy_qty = sum(o.get("qty", 0) or 0 for o in orders if o.get("side") == "Buy")
+    sell_qty = sum(o.get("qty", 0) or 0 for o in orders if o.get("side") == "Sell")
+
     st.markdown("### 📊 Summary")
     s1, s2, s3, s4, s5, s6 = st.columns(6)
-
-    def summary_box(label, value, color="#fff"):
-        return f'<div class="summary-box"><div class="stat-label">{label}</div><div class="stat-value" style="color:{color}">{value}</div></div>'
-
     net_color = "#00e676" if total_running_inr >= 0 else "#ff1744"
     with s1: st.markdown(summary_box("Net Running P&L", fmt_inr(total_running_inr), net_color), unsafe_allow_html=True)
     with s2: st.markdown(summary_box("Profit Positions", len(profit_orders), "#00e676"), unsafe_allow_html=True)
@@ -520,14 +494,10 @@ if orders:
 
     st.markdown("---")
 
-    # ==========================================
-    # ANALYSIS TABLE
-    # ==========================================
-
+    # --- Analysis table ---
     st.markdown("### 📋 Position Analysis")
 
     sorted_pairs = sorted(zip(orders, calcs), key=lambda x: x[1]["running_inr"])
-
     table_rows = []
     for o, c in sorted_pairs:
         danger_str = f"{c['danger_pct']:.0f}% to Liq" if c["danger_pct"] is not None else "—"
@@ -562,6 +532,23 @@ if orders:
     st.dataframe(style_table(table_df), use_container_width=True, hide_index=True)
     st.markdown("---")
 
+    # Store current price for position cards below
+    st.session_state["current_cp"] = cp
+
+# ==========================================
+# MAIN PAGE
+# ==========================================
+
+st.title("⚡ Live Order Monitor")
+
+orders = load_orders()
+
+# Live fragment — price + summary + table
+live_dashboard(orders)
+
+# Get current price for position cards
+cp = st.session_state.get("current_cp", 0)
+
 # ==========================================
 # ADD POSITION BUTTON
 # ==========================================
@@ -573,6 +560,8 @@ st.markdown("---")
 
 # ==========================================
 # POSITION CARDS
+# Static section — not in fragment
+# so Edit/Delete dialogs stay open
 # ==========================================
 
 if orders:
