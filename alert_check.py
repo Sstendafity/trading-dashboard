@@ -36,6 +36,11 @@ ORDERS_DB = "running_orders.json"
 ALERT_STATE_DB = "alert_state.json"
 DEFAULT_THRESHOLD_PCT = 3.0
 USD_TO_INR = 85.0
+LOT_SIZE = 0.001  # 1 lot = 0.001 BTC
+
+def btc_to_lots(btc_qty):
+    return round((btc_qty or 0) / LOT_SIZE)
+
 REPORT_INTERVAL_MINUTES = 13
 
 # ==========================================
@@ -198,7 +203,7 @@ def build_pct_alert_msg(order, current_price, move_pct, direction):
         f"━━━━━━━━━━━━━━━━━━\n"
         f"{side_emoji} <b>{side.upper()} / {'LONG' if side == 'Buy' else 'SHORT'}</b>\n"
         f"📍 Entry Price:   <code>${entry:,.1f}</code>\n"
-        f"⚖️ Quantity:      <code>{qty}</code>\n"
+        f"⚖️ Quantity:      <code>{btc_to_lots(qty)}</code>\n"
         f"📊 Current Price: <code>${current_price:,.1f}</code>\n"
         f"📉 Move Against:  <code>{move_pct:.2f}%</code> (threshold: {threshold}%)\n"
         f"💰 Running P&L:   <code>{pnl_sign}₹{running_inr:,.0f}</code> "
@@ -231,7 +236,7 @@ def build_liq_alert_msg(order, current_price):
         f"━━━━━━━━━━━━━━━━━━\n"
         f"{side_emoji} <b>{side.upper()} / {'LONG' if side == 'Buy' else 'SHORT'}</b>\n"
         f"📍 Entry Price:   <code>${entry:,.1f}</code>\n"
-        f"⚖️ Quantity:      <code>{qty}</code>\n"
+        f"⚖️ Quantity:      <code>{btc_to_lots(qty)}</code>\n"
         f"📊 Current Price: <code>${current_price:,.1f}</code>\n"
         f"💀 Liq Price:     <code>${liq:,.1f}</code>\n"
         f"💸 Est. Loss:     <code>-₹{abs(running_inr):,.0f}</code> "
@@ -281,7 +286,7 @@ def build_report_msg(orders, current_price):
         pnl_sign = "+" if running_inr >= 0 else ""
         lines.append(
             f"  {side_emoji} <b>{o.get('account')}</b> "
-            f"@ ${o.get('entry_price', 0):,.1f} | {o.get('qty', 0)} "
+            f"@ ${o.get('entry_price', 0):,.1f} | {btc_to_lots(o.get('qty', 0))} lots "
             f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
         )
 
@@ -304,8 +309,8 @@ def build_report_msg(orders, current_price):
         f"✅ Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
         f"❌ Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
         f"📋 Total Orders: {len(orders)}\n"
-        f"📦 Buy Qty: {buy_qty:,.3f}\n"
-        f"📦 Sell Qty: {sell_qty:,.3f}\n"
+        f"📦 Buy Qty: {btc_to_lots(buy_qty)} lots\n"
+        f"📦 Sell Qty: {btc_to_lots(sell_qty)} lots\n"
     )
     return msg
 

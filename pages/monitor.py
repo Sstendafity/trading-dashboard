@@ -10,7 +10,6 @@ from github import Github
 import sys
 sys.path.insert(0, os.getcwd())
 from auth import check_password
-from streamlit_autorefresh import st_autorefresh
 
 # if not check_password():
 #     st.stop()
@@ -21,6 +20,7 @@ from streamlit_autorefresh import st_autorefresh
 
 ORDERS_DB = "running_orders.json"
 USD_TO_INR = 85.0
+LOT_SIZE = 0.001  # 1 lot = 0.001 BTC
 
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"] if "GITHUB_TOKEN" in st.secrets else None
 REPO_NAME = "Sstendafity/trading-dashboard"
@@ -94,14 +94,6 @@ st.markdown("""
     font-size: 12px;
     color: #ff6b6b;
 }
-.safe-zone {
-    background: rgba(0, 230, 118, 0.08);
-    border: 1px solid rgba(0, 230, 118, 0.2);
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 12px;
-    color: #69f0ae;
-}
 .summary-box {
     background: #0f0f23;
     border-radius: 10px;
@@ -117,6 +109,22 @@ div.stButton > button {
 }
 </style>
 """, unsafe_allow_html=True)
+
+# ==========================================
+# LOT HELPERS
+# ==========================================
+
+def btc_to_lots(btc_qty):
+    """Convert BTC quantity to lots. 0.001 BTC = 1 lot."""
+    return round(btc_qty / LOT_SIZE)
+
+def lots_to_btc(lots):
+    """Convert lots to BTC quantity. 1 lot = 0.001 BTC."""
+    return lots * LOT_SIZE
+
+def fmt_lots(btc_qty):
+    """Display BTC quantity as lots."""
+    return f"{btc_to_lots(btc_qty)} lots"
 
 # ==========================================
 # PRICE FETCHING — CCXT with fallbacks
@@ -179,28 +187,22 @@ def fetch_with_bybit():
         "source": "bybit"
     }
 
-def fetch_btc_price():
+def _do_fetch():
     try:
         result = fetch_with_ccxt()
         if result:
-            st.session_state["price_cache"] = result
             return result
     except Exception:
         pass
     try:
-        result = fetch_with_coingecko()
-        st.session_state["price_cache"] = result
-        return result
+        return fetch_with_coingecko()
     except Exception:
         pass
     try:
-        result = fetch_with_bybit()
-        st.session_state["price_cache"] = result
-        return result
+        return fetch_with_bybit()
     except Exception:
         pass
-    return st.session_state.get("price_cache",
-           {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False, "source": "none"})
+    return None
 
 # ==========================================
 # STORAGE
@@ -300,7 +302,7 @@ def color_val(v):
     return "color:#00e676" if v >= 0 else "color:#ff1744"
 
 # ==========================================
-# POPUP DIALOG — Add / Edit Position
+# POPUP DIALOGS
 # ==========================================
 
 @st.dialog("➕ Add New Position", width="large")
@@ -311,7 +313,9 @@ def dialog_add_position(orders):
         side = st.selectbox("Side", ["Buy", "Sell"], key="dlg_side")
     with f2:
         entry = st.number_input("Entry Price (USD)", min_value=0.0, value=0.0, step=0.1, key="dlg_entry")
-        qty = st.number_input("Quantity (BTC)", min_value=0.0, value=0.0, step=0.001, format="%.4f", key="dlg_qty")
+        lot_qty = st.number_input("Quantity (Lots)", min_value=1, value=1, step=1, key="dlg_qty",
+                                  help="1 lot = 0.001 BTC")
+        st.caption(f"= {lots_to_btc(lot_qty):.4f} BTC")
         threshold = st.number_input("Alert Threshold (%)", min_value=0.5, max_value=20.0, value=3.0, step=0.5, key="dlg_threshold")
     with f3:
         liq_input = st.number_input("Liquidation Price (optional)", min_value=0.0, value=0.0, step=0.1, key="dlg_liq")
@@ -326,14 +330,14 @@ def dialog_add_position(orders):
         sl_val = sl_input if sl_input > 0 else None
 
     if st.button("✅ Add Position", use_container_width=True):
-        if entry <= 0 or qty <= 0:
+        if entry <= 0 or lot_qty <= 0:
             st.error("Entry Price and Quantity are required.")
         else:
             new_order = {
                 "account": acc,
                 "side": side,
                 "entry_price": entry,
-                "qty": qty,
+                "qty": lots_to_btc(lot_qty),  # store as BTC
                 "liquidation": liq_val,
                 "target": tg_val,
                 "stop_loss": sl_val,
@@ -342,12 +346,13 @@ def dialog_add_position(orders):
             }
             orders.append(new_order)
             save_orders(orders)
-            st.success(f"✅ {acc} {side} position added.")
+            st.success(f"✅ {acc} {side} — {lot_qty} lots added.")
             st.rerun()
 
 @st.dialog("✏️ Edit Position", width="large")
 def dialog_edit_position(orders, idx):
     default = orders[idx]
+    default_lots = btc_to_lots(default.get("qty", 0) or 0)
 
     f1, f2, f3 = st.columns(3)
     with f1:
@@ -361,9 +366,11 @@ def dialog_edit_position(orders, idx):
         entry = st.number_input("Entry Price (USD)", min_value=0.0,
                                 value=float(default.get("entry_price", 0) or 0),
                                 step=0.1, key="dlg_edit_entry")
-        qty = st.number_input("Quantity (BTC)", min_value=0.0,
-                              value=float(default.get("qty", 0) or 0),
-                              step=0.001, format="%.4f", key="dlg_edit_qty")
+        lot_qty = st.number_input("Quantity (Lots)", min_value=1,
+                                  value=max(1, default_lots),
+                                  step=1, key="dlg_edit_qty",
+                                  help="1 lot = 0.001 BTC")
+        st.caption(f"= {lots_to_btc(lot_qty):.4f} BTC")
         threshold = st.number_input("Alert Threshold (%)", min_value=0.5, max_value=20.0,
                                     value=float(default.get("alert_threshold", 3.0)),
                                     step=0.5, key="dlg_edit_threshold")
@@ -389,14 +396,14 @@ def dialog_edit_position(orders, idx):
         sl_val = sl_input if sl_input > 0 else None
 
     if st.button("💾 Update Position", use_container_width=True):
-        if entry <= 0 or qty <= 0:
+        if entry <= 0 or lot_qty <= 0:
             st.error("Entry Price and Quantity are required.")
         else:
             orders[idx] = {
                 "account": acc,
                 "side": side,
                 "entry_price": entry,
-                "qty": qty,
+                "qty": lots_to_btc(lot_qty),  # store as BTC
                 "liquidation": liq_val,
                 "target": tg_val,
                 "stop_loss": sl_val,
@@ -408,17 +415,51 @@ def dialog_edit_position(orders, idx):
             st.rerun()
 
 # ==========================================
-# AUTO REFRESH
+# PRICE BAR — Fragment so only price
+# refreshes, dialogs stay open
+# ==========================================
+
+@st.fragment(run_every=30)
+def price_bar():
+    result = _do_fetch()
+    if result:
+        st.session_state["price_cache"] = result
+
+    price_data = st.session_state.get("price_cache",
+        {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False, "source": "none"})
+
+    cp = price_data["price"]
+
+    if not price_data.get("ok"):
+        st.error("⚠️ Could not fetch price. All sources failed — try refreshing.")
+
+    col_price, col_chg, col_high, col_low, col_refresh = st.columns([3, 2, 2, 2, 1])
+    change_color = "price-up" if price_data["change_pct"] >= 0 else "price-down"
+    change_arrow = "▲" if price_data["change_pct"] >= 0 else "▼"
+
+    with col_price:
+        st.markdown(f'<div class="price-display {change_color}">BTC ${cp:,.1f}</div>', unsafe_allow_html=True)
+    with col_chg:
+        st.markdown(f'<div class="stat-label">24h Change</div><div class="stat-value" style="{color_val(price_data["change_pct"])}">{change_arrow} {abs(price_data["change_pct"]):.2f}%</div>', unsafe_allow_html=True)
+    with col_high:
+        st.markdown(f'<div class="stat-label">24h High</div><div class="stat-value" style="color:#fff">${price_data["high"]:,.1f}</div>', unsafe_allow_html=True)
+    with col_low:
+        st.markdown(f'<div class="stat-label">24h Low</div><div class="stat-value" style="color:#fff">${price_data["low"]:,.1f}</div>', unsafe_allow_html=True)
+    with col_refresh:
+        if st.button("🔄", help="Force refresh price"):
+            st.session_state.pop("price_cache", None)
+            st.rerun(scope="fragment")
+
+    st.caption(f"Price source: {price_data.get('source', '—')} · Updated: {datetime.datetime.now().strftime('%H:%M:%S')}")
+
+# ==========================================
+# SIDEBAR
 # ==========================================
 
 refresh_interval = st.sidebar.selectbox(
-    "Auto Refresh", ["Off", "30s", "1 min", "5 min"],
-    index=1
+    "Price Refresh", ["30s", "1 min", "5 min", "Off"],
+    index=0
 )
-refresh_ms = {"30s": 30_000, "1 min": 60_000, "5 min": 300_000}
-if refresh_interval != "Off":
-    st_autorefresh(interval=refresh_ms[refresh_interval], key="price_refresh")
-    st.sidebar.caption(f"Refreshing every {refresh_interval}")
 
 # ==========================================
 # MAIN PAGE
@@ -426,34 +467,12 @@ if refresh_interval != "Off":
 
 st.title("⚡ Live Order Monitor")
 
-# --- LIVE PRICE BAR ---
-price_data = fetch_btc_price()
+price_bar()
+
+# Get current price from session state (set by fragment)
+price_data = st.session_state.get("price_cache",
+    {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False, "source": "none"})
 cp = price_data["price"]
-
-if not price_data["ok"]:
-    st.error("⚠️ Could not fetch price. All sources failed — try refreshing.")
-    cp = 0
-
-col_price, col_chg, col_high, col_low, col_refresh = st.columns([3, 2, 2, 2, 1])
-
-change_color = "price-up" if price_data["change_pct"] >= 0 else "price-down"
-change_arrow = "▲" if price_data["change_pct"] >= 0 else "▼"
-
-with col_price:
-    st.markdown(f'<div class="price-display {change_color}">BTC ${cp:,.1f}</div>', unsafe_allow_html=True)
-with col_chg:
-    st.markdown(f'<div class="stat-label">24h Change</div><div class="stat-value" style="{color_val(price_data["change_pct"])}">{change_arrow} {abs(price_data["change_pct"]):.2f}%</div>', unsafe_allow_html=True)
-with col_high:
-    st.markdown(f'<div class="stat-label">24h High</div><div class="stat-value" style="color:#fff">${price_data["high"]:,.1f}</div>', unsafe_allow_html=True)
-with col_low:
-    st.markdown(f'<div class="stat-label">24h Low</div><div class="stat-value" style="color:#fff">${price_data["low"]:,.1f}</div>', unsafe_allow_html=True)
-with col_refresh:
-    if st.button("🔄", help="Force refresh price"):
-        st.session_state.pop("price_cache", None)
-        st.rerun()
-
-source = price_data.get("source", "—")
-st.caption(f"Price source: {source}")
 
 st.markdown("---")
 
@@ -496,8 +515,8 @@ if orders:
     with s2: st.markdown(summary_box("Profit Positions", len(profit_orders), "#00e676"), unsafe_allow_html=True)
     with s3: st.markdown(summary_box("Loss Positions", len(loss_orders), "#ff1744"), unsafe_allow_html=True)
     with s4: st.markdown(summary_box("Total Positions", len(orders), "#fff"), unsafe_allow_html=True)
-    with s5: st.markdown(summary_box("Buy Qty (BTC)", f"{buy_qty:.4f}", "#00e676"), unsafe_allow_html=True)
-    with s6: st.markdown(summary_box("Sell Qty (BTC)", f"{sell_qty:.4f}", "#ff1744"), unsafe_allow_html=True)
+    with s5: st.markdown(summary_box("Buy Lots", f"{btc_to_lots(buy_qty)}", "#00e676"), unsafe_allow_html=True)
+    with s6: st.markdown(summary_box("Sell Lots", f"{btc_to_lots(sell_qty)}", "#ff1744"), unsafe_allow_html=True)
 
     st.markdown("---")
 
@@ -517,7 +536,7 @@ if orders:
             "Exchange": ACCOUNT_GROUP.get(o["account"], "—"),
             "Side": o["side"],
             "Entry": fmt_price(o.get("entry_price")),
-            "Qty": f"{o.get('qty', 0):.4f}",
+            "Qty (Lots)": btc_to_lots(o.get("qty", 0) or 0),
             "EP×CP": fmt_price(c["ep_cp_diff"]),
             "Run P&L (USD)": fmt_usd(c["running_usd"]),
             "Run P&L (INR)": fmt_inr(c["running_inr"]),
@@ -547,7 +566,7 @@ if orders:
 # ADD POSITION BUTTON
 # ==========================================
 
-if st.button("➕ Add New Position", use_container_width=False):
+if st.button("➕ Add New Position"):
     dialog_add_position(orders)
 
 st.markdown("---")
@@ -590,7 +609,7 @@ if orders:
 
             with c1:
                 st.markdown(f'<div class="stat-label">Entry Price</div><div class="stat-value">${o.get("entry_price", 0):,.1f}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="stat-label">Quantity</div><div class="stat-value">{o.get("qty", 0):.4f} BTC</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="stat-label">Quantity</div><div class="stat-value">{fmt_lots(o.get("qty", 0) or 0)}</div>', unsafe_allow_html=True)
                 st.markdown(f'<div class="stat-label">EP × CP Diff</div><div class="stat-value" style="{color_val(c["ep_cp_diff"])}">{fmt_price(c["ep_cp_diff"])}</div>', unsafe_allow_html=True)
 
             with c2:
@@ -643,8 +662,8 @@ if orders:
 # SIDEBAR INFO
 # ==========================================
 
+price_data = st.session_state.get("price_cache", {})
 st.sidebar.markdown("---")
-st.sidebar.markdown(f"**BTC Price:** ${cp:,.1f}")
+st.sidebar.markdown(f"**BTC Price:** ${price_data.get('price', 0):,.1f}")
 st.sidebar.markdown(f"**Source:** {price_data.get('source', '—')}")
 st.sidebar.markdown(f"**Open Positions:** {len(orders)}")
-st.sidebar.markdown(f"**Last Update:** {datetime.datetime.now().strftime('%H:%M:%S')}")
