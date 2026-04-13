@@ -123,10 +123,6 @@ div.stButton > button {
 # ==========================================
 
 def fetch_with_ccxt():
-    """
-    Try multiple exchanges via CCXT.
-    OKX, KuCoin, Gate.io, HTX are all accessible from AWS/Streamlit Cloud.
-    """
     exchanges_to_try = ['okx', 'kucoin', 'gateio', 'htx']
     for exchange_id in exchanges_to_try:
         try:
@@ -152,7 +148,6 @@ def fetch_with_ccxt():
     return None
 
 def fetch_with_coingecko():
-    """CoinGecko REST fallback — was working before."""
     r = requests.get(
         "https://api.coingecko.com/api/v3/coins/markets"
         "?vs_currency=usd&ids=bitcoin",
@@ -169,7 +164,6 @@ def fetch_with_coingecko():
     }
 
 def fetch_with_bybit():
-    """Bybit REST fallback."""
     r = requests.get(
         "https://api.bybit.com/v5/market/tickers"
         "?category=linear&symbol=BTCUSDT",
@@ -186,12 +180,6 @@ def fetch_with_bybit():
     }
 
 def fetch_btc_price():
-    """
-    No caching — fresh API call on every rerun.
-    Falls back to last known price only if all sources fail.
-    Order: CCXT (OKX/KuCoin/Gate/HTX) → CoinGecko → Bybit → last known
-    """
-    # 1. Try CCXT exchanges
     try:
         result = fetch_with_ccxt()
         if result:
@@ -199,24 +187,18 @@ def fetch_btc_price():
             return result
     except Exception:
         pass
-
-    # 2. CoinGecko
     try:
         result = fetch_with_coingecko()
         st.session_state["price_cache"] = result
         return result
     except Exception:
         pass
-
-    # 3. Bybit
     try:
         result = fetch_with_bybit()
         st.session_state["price_cache"] = result
         return result
     except Exception:
         pass
-
-    # 4. All failed — return last known price
     return st.session_state.get("price_cache",
            {"price": 0, "change_pct": 0, "high": 0, "low": 0, "ok": False, "source": "none"})
 
@@ -318,6 +300,114 @@ def color_val(v):
     return "color:#00e676" if v >= 0 else "color:#ff1744"
 
 # ==========================================
+# POPUP DIALOG — Add / Edit Position
+# ==========================================
+
+@st.dialog("➕ Add New Position", width="large")
+def dialog_add_position(orders):
+    f1, f2, f3 = st.columns(3)
+    with f1:
+        acc = st.selectbox("Account", ACCOUNTS, key="dlg_acc")
+        side = st.selectbox("Side", ["Buy", "Sell"], key="dlg_side")
+    with f2:
+        entry = st.number_input("Entry Price (USD)", min_value=0.0, value=0.0, step=0.1, key="dlg_entry")
+        qty = st.number_input("Quantity (BTC)", min_value=0.0, value=0.0, step=0.001, format="%.4f", key="dlg_qty")
+        threshold = st.number_input("Alert Threshold (%)", min_value=0.5, max_value=20.0, value=3.0, step=0.5, key="dlg_threshold")
+    with f3:
+        liq_input = st.number_input("Liquidation Price (optional)", min_value=0.0, value=0.0, step=0.1, key="dlg_liq")
+        liq_val = liq_input if liq_input > 0 else None
+
+    f4, f5 = st.columns(2)
+    with f4:
+        tg_input = st.number_input("Target / TG (optional)", min_value=0.0, value=0.0, step=0.1, key="dlg_tg")
+        tg_val = tg_input if tg_input > 0 else None
+    with f5:
+        sl_input = st.number_input("Stop Loss / SL (optional)", min_value=0.0, value=0.0, step=0.1, key="dlg_sl")
+        sl_val = sl_input if sl_input > 0 else None
+
+    if st.button("✅ Add Position", use_container_width=True):
+        if entry <= 0 or qty <= 0:
+            st.error("Entry Price and Quantity are required.")
+        else:
+            new_order = {
+                "account": acc,
+                "side": side,
+                "entry_price": entry,
+                "qty": qty,
+                "liquidation": liq_val,
+                "target": tg_val,
+                "stop_loss": sl_val,
+                "added_at": str(datetime.datetime.now()),
+                "alert_threshold": threshold,
+            }
+            orders.append(new_order)
+            save_orders(orders)
+            st.success(f"✅ {acc} {side} position added.")
+            st.rerun()
+
+@st.dialog("✏️ Edit Position", width="large")
+def dialog_edit_position(orders, idx):
+    default = orders[idx]
+
+    f1, f2, f3 = st.columns(3)
+    with f1:
+        acc = st.selectbox("Account", ACCOUNTS,
+                           index=ACCOUNTS.index(default.get("account", "A-1")) if default.get("account") in ACCOUNTS else 0,
+                           key="dlg_edit_acc")
+        side = st.selectbox("Side", ["Buy", "Sell"],
+                            index=0 if default.get("side", "Buy") == "Buy" else 1,
+                            key="dlg_edit_side")
+    with f2:
+        entry = st.number_input("Entry Price (USD)", min_value=0.0,
+                                value=float(default.get("entry_price", 0) or 0),
+                                step=0.1, key="dlg_edit_entry")
+        qty = st.number_input("Quantity (BTC)", min_value=0.0,
+                              value=float(default.get("qty", 0) or 0),
+                              step=0.001, format="%.4f", key="dlg_edit_qty")
+        threshold = st.number_input("Alert Threshold (%)", min_value=0.5, max_value=20.0,
+                                    value=float(default.get("alert_threshold", 3.0)),
+                                    step=0.5, key="dlg_edit_threshold")
+    with f3:
+        liq_default = default.get("liquidation", None)
+        liq_input = st.number_input("Liquidation Price (optional)", min_value=0.0,
+                                    value=float(liq_default) if liq_default else 0.0,
+                                    step=0.1, key="dlg_edit_liq")
+        liq_val = liq_input if liq_input > 0 else None
+
+    f4, f5 = st.columns(2)
+    with f4:
+        tg_default = default.get("target", None)
+        tg_input = st.number_input("Target / TG (optional)", min_value=0.0,
+                                   value=float(tg_default) if tg_default else 0.0,
+                                   step=0.1, key="dlg_edit_tg")
+        tg_val = tg_input if tg_input > 0 else None
+    with f5:
+        sl_default = default.get("stop_loss", None)
+        sl_input = st.number_input("Stop Loss / SL (optional)", min_value=0.0,
+                                   value=float(sl_default) if sl_default else 0.0,
+                                   step=0.1, key="dlg_edit_sl")
+        sl_val = sl_input if sl_input > 0 else None
+
+    if st.button("💾 Update Position", use_container_width=True):
+        if entry <= 0 or qty <= 0:
+            st.error("Entry Price and Quantity are required.")
+        else:
+            orders[idx] = {
+                "account": acc,
+                "side": side,
+                "entry_price": entry,
+                "qty": qty,
+                "liquidation": liq_val,
+                "target": tg_val,
+                "stop_loss": sl_val,
+                "added_at": default.get("added_at", str(datetime.datetime.now())),
+                "alert_threshold": threshold,
+            }
+            save_orders(orders)
+            st.success("✅ Position updated.")
+            st.rerun()
+
+# ==========================================
 # AUTO REFRESH
 # ==========================================
 
@@ -362,7 +452,6 @@ with col_refresh:
         st.session_state.pop("price_cache", None)
         st.rerun()
 
-# Show which source is being used (helpful for debugging)
 source = price_data.get("source", "—")
 st.caption(f"Price source: {source}")
 
@@ -455,6 +544,15 @@ if orders:
     st.markdown("---")
 
 # ==========================================
+# ADD POSITION BUTTON
+# ==========================================
+
+if st.button("➕ Add New Position", use_container_width=False):
+    dialog_add_position(orders)
+
+st.markdown("---")
+
+# ==========================================
 # POSITION CARDS
 # ==========================================
 
@@ -533,100 +631,13 @@ if orders:
             btn1, btn2, _ = st.columns([2, 2, 5])
             with btn1:
                 if st.button("✏️ Edit", key=f"edit_{i}"):
-                    st.session_state["editing_idx"] = orders.index(o)
-                    st.rerun()
+                    dialog_edit_position(orders, orders.index(o))
             with btn2:
                 if st.button("🗑️ Close Position", key=f"del_{i}"):
                     orders.remove(o)
                     save_orders(orders)
                     st.success(f"Position {o['account']} removed.")
                     st.rerun()
-
-st.markdown("---")
-
-# ==========================================
-# ADD / EDIT POSITION FORM
-# ==========================================
-
-editing_idx = st.session_state.get("editing_idx", None)
-form_title = "✏️ Edit Position" if editing_idx is not None else "➕ Add New Position"
-
-with st.expander(form_title, expanded=(editing_idx is not None or not orders)):
-    default = {}
-    if editing_idx is not None and editing_idx < len(orders):
-        default = orders[editing_idx]
-
-    f1, f2, f3 = st.columns(3)
-    with f1:
-        acc = st.selectbox("Account", ACCOUNTS,
-                           index=ACCOUNTS.index(default.get("account", "A-1")) if default.get("account") in ACCOUNTS else 0,
-                           key="form_acc")
-        side = st.selectbox("Side", ["Buy", "Sell"],
-                            index=0 if default.get("side", "Buy") == "Buy" else 1,
-                            key="form_side")
-    with f2:
-        entry = st.number_input("Entry Price (USD)", min_value=0.0, value=float(default.get("entry_price", 0) or 0), step=0.1, key="form_entry")
-        qty = st.number_input("Quantity (BTC)", min_value=0.0, value=float(default.get("qty", 0) or 0), step=0.001, format="%.4f", key="form_qty")
-        threshold = st.number_input(
-            "Alert Threshold (%)",
-            min_value=0.5, max_value=20.0,
-            value=float(default.get("alert_threshold", 3.0)),
-            step=0.5, key="form_threshold"
-        )
-    with f3:
-        liq_default = default.get("liquidation", None)
-        liq_input = st.number_input("Liquidation Price (optional)", min_value=0.0,
-                                    value=float(liq_default) if liq_default else 0.0,
-                                    step=0.1, key="form_liq")
-        liq_val = liq_input if liq_input > 0 else None
-
-    f4, f5 = st.columns(2)
-    with f4:
-        tg_default = default.get("target", None)
-        tg_input = st.number_input("Target / TG (optional)", min_value=0.0,
-                                   value=float(tg_default) if tg_default else 0.0,
-                                   step=0.1, key="form_tg")
-        tg_val = tg_input if tg_input > 0 else None
-    with f5:
-        sl_default = default.get("stop_loss", None)
-        sl_input = st.number_input("Stop Loss / SL (optional)", min_value=0.0,
-                                   value=float(sl_default) if sl_default else 0.0,
-                                   step=0.1, key="form_sl")
-        sl_val = sl_input if sl_input > 0 else None
-
-    btn_col1, btn_col2 = st.columns([2, 5])
-    with btn_col1:
-        submit_label = "💾 Update" if editing_idx is not None else "✅ Add Position"
-        if st.button(submit_label, use_container_width=True):
-            if entry <= 0 or qty <= 0:
-                st.error("Entry Price and Quantity are required.")
-            else:
-                new_order = {
-                    "account": acc,
-                    "side": side,
-                    "entry_price": entry,
-                    "qty": qty,
-                    "liquidation": liq_val,
-                    "target": tg_val,
-                    "stop_loss": sl_val,
-                    "added_at": str(datetime.datetime.now()),
-                    "alert_threshold": threshold,
-                }
-                if editing_idx is not None:
-                    orders[editing_idx] = new_order
-                    st.session_state.pop("editing_idx", None)
-                    st.success("✅ Position updated.")
-                else:
-                    orders.append(new_order)
-                    st.success(f"✅ {acc} {side} position added.")
-                save_orders(orders)
-                st.rerun()
-
-    if editing_idx is not None:
-        with btn_col2:
-            if st.button("✖ Cancel Edit"):
-                st.session_state.pop("editing_idx", None)
-                st.rerun()
 
 # ==========================================
 # SIDEBAR INFO
