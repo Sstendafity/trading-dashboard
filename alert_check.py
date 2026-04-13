@@ -304,8 +304,8 @@ def build_report_msg(orders, current_price):
         f"✅ Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
         f"❌ Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
         f"📋 Total Orders: {len(orders)}\n"
-        f"📦 Buy Qty: {buy_qty}\n"
-        f"📦 Sell Qty: {sell_qty}\n"
+        f"📦 Buy Qty: {buy_qty:,.3f}\n"
+        f"📦 Sell Qty: {sell_qty:,.3f}\n"
     )
     return msg
 
