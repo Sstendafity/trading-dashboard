@@ -1,16 +1,5 @@
 [
   {
-    "account": "A-2",
-    "side": "Buy",
-    "entry_price": 71195.0,
-    "qty": 0.001,
-    "liquidation": 55882.5,
-    "target": 80000.0,
-    "stop_loss": 73200.0,
-    "added_at": "2026-04-12 02:31:40.604133",
-    "alert_threshold": 3.0
-  },
-  {
     "account": "A-3",
     "side": "Buy",
     "entry_price": 70969.5,
