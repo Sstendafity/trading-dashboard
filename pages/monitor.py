@@ -419,6 +419,138 @@ def dialog_edit_position(orders, idx):
 # Reruns every 30s independently —
 # dialogs and position cards stay open
 # ==========================================
+@st.fragment(run_every=5)
+def telegram_command_listener(orders, cp):
+    """Polls Telegram every 5s for /report command. Runs inside Streamlit — instant response."""
+    TELEGRAM_TOKEN_UI = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_CHAT_IDS_UI = [
+        st.secrets.get("TELEGRAM_CHAT_ID", ""),
+        st.secrets.get("TELEGRAM_CHAT_ID_2", ""),
+    ]
+    TELEGRAM_CHAT_IDS_UI = [c for c in TELEGRAM_CHAT_IDS_UI if c]
+
+    if not TELEGRAM_TOKEN_UI:
+        return
+
+    # Get last processed update_id from session state
+    offset = st.session_state.get("tg_last_update_id", None)
+    params = {"timeout": 0, "limit": 10}
+    if offset is not None:
+        params["offset"] = offset + 1
+
+    try:
+        r = requests.get(
+            f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/getUpdates",
+            params=params,
+            timeout=5
+        )
+        if not r.ok:
+            return
+        updates = r.json().get("result", [])
+    except Exception:
+        return
+
+    if not updates:
+        return
+
+    new_last_id = offset or 0
+    for update in updates:
+        update_id = update.get("update_id", 0)
+        new_last_id = max(new_last_id, update_id)
+
+        message = update.get("message", {})
+        text = message.get("text", "").strip().lower()
+        chat_id = str(message.get("chat", {}).get("id", ""))
+
+        if not chat_id:
+            continue
+
+        if text.startswith("/report"):
+            if not orders:
+                msg = "⚪ No open positions at the moment."
+            else:
+                # Build report
+                now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+
+                total_usd = 0
+                total_profit = 0
+                total_loss = 0
+                total_inr = 0
+                profit_count = 0
+                loss_count = 0
+                buy_qty = 0
+                sell_qty = 0
+                lines = []
+
+                # Calculate P&L for all orders first
+                order_pnls = []
+                # Add this after order_pnls is built, before the msg assembly
+
+                ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 16)]
+                active_accounts = {o.get("account") for o in orders}
+                inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
+
+                for o in orders:
+                    running_usd = (cp - o.get("entry_price", 0)) * o.get("qty", 0) if o.get("side") == "Buy" else (o.get("entry_price", 0) - cp) * o.get("qty", 0)
+                    running_inr = running_usd * USD_TO_INR
+                    total_usd += running_usd
+                    total_inr += running_inr
+                    if running_inr > 0:
+                        profit_count += 1
+                        total_profit += running_inr
+                    elif running_inr < 0:
+                        loss_count += 1
+                        total_loss += running_inr
+                    order_pnls.append((o, running_usd, running_inr))
+                    if o.get("side") == "Buy":
+                        buy_qty += o.get("qty", 0) or 0
+                    else:
+                        sell_qty += o.get("qty", 0) or 0
+
+                # Sort highest profit to lowest loss
+                order_pnls.sort(key=lambda x: x[2], reverse=True)
+
+                for o, running_usd, running_inr in order_pnls:
+                    side_emoji = "🟢" if o.get("side") == "Buy" else "🔴"
+                    pnl_sign = "+" if running_inr >= 0 else ""
+                    lines.append(
+                        f"  {side_emoji} <b>{o.get('account')}</b> "
+                        f"@ ${o.get('entry_price', 0):,.1f} | {btc_to_lots(o.get('qty', 0))} lots "
+                        f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
+                    )
+
+                total_sign = "+" if total_inr >= 0 else ""
+                total_emoji = "📈" if total_inr >= 0 else "📉"
+
+                msg = (
+                    f"📊 <b>INSTANT PORTFOLIO REPORT</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"🕐 {now}\n"
+                    f"₿ BTC Price: <code>${cp:,.1f}</code>\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                )
+                msg += "\n".join(lines)
+                msg += (
+                    f"\n━━━━━━━━━━━━━━━━━━\n"
+                    f"{total_emoji} <b>Net Running P&L</b>: "
+                    f"<code>{total_sign}₹{total_inr:,.0f}</code> "
+                    f"(<code>{total_sign}${total_usd:,.2f}</code>)\n"
+                    f"✅ Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
+                    f"❌ Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
+                    f"📋 Total Orders: {len(orders)}\n"
+                    f"📦 Buy Qty: {btc_to_lots(buy_qty)} lots\n"
+                    f"📦 Sell Qty: {btc_to_lots(sell_qty)} lots\n"
+                    f"⚪ Idle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
+                )
+
+            # Reply only to the requester
+            requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+                json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"},
+                timeout=10
+            )
+
+    st.session_state["tg_last_update_id"] = new_last_id
 
 @st.fragment(run_every=30)
 def live_dashboard(orders):
@@ -641,12 +773,10 @@ def live_dashboard(orders):
 st.title("⚡ Live Order Monitor")
 
 orders = load_orders()
-
-# Live fragment — price + summary + table
-live_dashboard(orders)
-
-# Get current price for position cards
 cp = st.session_state.get("current_cp", 0)
+
+telegram_command_listener(orders, cp)
+live_dashboard(orders)
 
 # ==========================================
 # ADD POSITION BUTTON
