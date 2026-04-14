@@ -469,7 +469,12 @@ def telegram_command_listener(orders, cp):
             if not orders:
                 msg = "⚪ No open positions at the moment."
             else:
+                # Fetch fresh price at the moment /report is received
+                fresh = _do_fetch()
+                cp = fresh["price"] if fresh else st.session_state.get("current_cp", 0)
+
                 # Build report
+                total_inr, total_usd = 0, 0
                 now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
                 total_usd = 0
