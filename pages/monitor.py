@@ -452,6 +452,105 @@ def live_dashboard(orders):
             st.session_state.pop("price_cache", None)
             st.rerun(scope="fragment")
 
+    # Send instant report button
+    TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_CHAT_IDS_UI = [
+        st.secrets.get("TELEGRAM_CHAT_ID", ""),
+        st.secrets.get("TELEGRAM_CHAT_ID_2", ""),
+    ]
+    TELEGRAM_CHAT_IDS_UI = [c for c in TELEGRAM_CHAT_IDS_UI if c]
+
+    if st.button("📊 Send Report Now", help="Send instant portfolio report to Telegram"):
+        if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS_UI:
+            st.warning("Telegram not configured in secrets.")
+        elif not orders:
+            st.info("No open positions to report.")
+        else:
+            # Build report inline
+            now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+
+            total_usd = 0
+            total_profit = 0
+            total_loss = 0
+            total_inr = 0
+            profit_count = 0
+            loss_count = 0
+            buy_qty = 0
+            sell_qty = 0
+            lines = []
+
+            # Calculate P&L for all orders first
+            order_pnls = []
+            # Add this after order_pnls is built, before the msg assembly
+
+            ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 16)]
+            active_accounts = {o.get("account") for o in orders}
+            inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
+
+            for o in orders:
+                running_usd = (cp - o.get("entry_price", 0)) * o.get("qty", 0) if o.get("side") == "Buy" else (o.get("entry_price", 0) - cp) * o.get("qty", 0)
+                running_inr = running_usd * USD_TO_INR
+                total_usd += running_usd
+                total_inr += running_inr
+                if running_inr > 0:
+                    profit_count += 1
+                    total_profit += running_inr
+                elif running_inr < 0:
+                    loss_count += 1
+                    total_loss += running_inr
+                order_pnls.append((o, running_usd, running_inr))
+                if o.get("side") == "Buy":
+                    buy_qty += o.get("qty", 0) or 0
+                else:
+                    sell_qty += o.get("qty", 0) or 0
+
+            # Sort highest profit to lowest loss
+            order_pnls.sort(key=lambda x: x[2], reverse=True)
+
+            for o, running_usd, running_inr in order_pnls:
+                side_emoji = "🟢" if o.get("side") == "Buy" else "🔴"
+                pnl_sign = "+" if running_inr >= 0 else ""
+                lines.append(
+                    f"  {side_emoji} <b>{o.get('account')}</b> "
+                    f"@ ${o.get('entry_price', 0):,.1f} | {btc_to_lots(o.get('qty', 0))} lots "
+                    f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
+                )
+
+            total_sign = "+" if total_inr >= 0 else ""
+            total_emoji = "📈" if total_inr >= 0 else "📉"
+
+            msg = (
+                f"📊 <b>INSTANT PORTFOLIO REPORT</b>\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"🕐 {now}\n"
+                f"₿ BTC Price: <code>${cp:,.1f}</code>\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+            )
+            msg += "\n".join(lines)
+            msg += (
+                f"\n━━━━━━━━━━━━━━━━━━\n"
+                f"{total_emoji} <b>Net Running P&L</b>: "
+                f"<code>{total_sign}₹{total_inr:,.0f}</code> "
+                f"(<code>{total_sign}${total_usd:,.2f}</code>)\n"
+                f"✅ Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
+                f"❌ Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
+                f"📋 Total Orders: {len(orders)}\n"
+                f"📦 Buy Qty: {btc_to_lots(buy_qty)} lots\n"
+                f"📦 Sell Qty: {btc_to_lots(sell_qty)} lots\n"
+                f"⚪ Idle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
+            )
+
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+            all_ok = True
+            for chat_id in TELEGRAM_CHAT_IDS_UI:
+                r = requests.post(url, json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}, timeout=10)
+                if not r.ok:
+                    all_ok = False
+            if all_ok:
+                st.success("✅ Report sent to Telegram!")
+            else:
+                st.error("❌ Failed to send to some chats.")
+
     st.caption(f"Source: {price_data.get('source', '—')} · {datetime.datetime.now().strftime('%H:%M:%S')}")
     st.markdown("---")
 

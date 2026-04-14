@@ -123,11 +123,11 @@ def save_json(path, data):
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
-# Replace send_telegram function with:
-def send_telegram(message):
+def send_telegram(message, chat_ids=None):
+    """Send to all TELEGRAM_CHAT_IDS, or specific chat_ids if provided."""
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     success = True
-    for chat_id in TELEGRAM_CHAT_IDS:
+    for chat_id in (chat_ids if chat_ids is not None else TELEGRAM_CHAT_IDS):
         payload = {
             "chat_id": chat_id,
             "text": message,
@@ -322,6 +322,66 @@ def build_report_msg(orders, current_price):
     return msg
 
 # ==========================================
+# /report COMMAND HANDLER
+# ==========================================
+
+def get_bot_updates(offset=None):
+    """Poll Telegram for new messages sent to the bot."""
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates"
+    params = {"timeout": 0, "limit": 10}
+    if offset is not None:
+        params["offset"] = offset
+    try:
+        r = requests.get(url, params=params, timeout=10)
+        if r.ok:
+            return r.json().get("result", [])
+    except Exception as e:
+        print(f"getUpdates failed: {e}")
+    return []
+
+def handle_bot_commands(orders, current_price, alert_state):
+    """
+    Check for /report commands sent to the bot since last run.
+    Replies only to the requester's chat — does NOT affect the 15-min timer.
+    Returns (updated alert_state, state_changed).
+    """
+    last_update_id = alert_state.get("last_update_id", None)
+    offset = (last_update_id + 1) if last_update_id is not None else None
+    updates = get_bot_updates(offset=offset)
+
+    if not updates:
+        return alert_state, False
+
+    state_changed = False
+    new_last_id = last_update_id or 0
+
+    for update in updates:
+        update_id = update.get("update_id", 0)
+        new_last_id = max(new_last_id, update_id)
+
+        message = update.get("message", {})
+        text = message.get("text", "").strip().lower()
+        chat_id = str(message.get("chat", {}).get("id", ""))
+
+        if not chat_id:
+            continue
+
+        if text.startswith("/report"):
+            print(f"📲 /report command from chat {chat_id}")
+            if not orders:
+                send_telegram("⚪ No open positions at the moment.", chat_ids=[chat_id])
+            else:
+                msg = build_report_msg(orders, current_price)
+                send_telegram(msg, chat_ids=[chat_id])
+                print(f"✅ Instant /report sent to chat {chat_id}")
+
+    if new_last_id != (last_update_id or 0):
+        alert_state["last_update_id"] = new_last_id
+        state_changed = True
+
+    return alert_state, state_changed
+
+# ==========================================
 # MAIN
 # ==========================================
 
@@ -340,14 +400,23 @@ def main():
 
     # Load orders
     orders = load_json(ORDERS_DB, [])
+
+    alert_state = load_json(ALERT_STATE_DB, {})
+    state_changed = False
+
+    # /report command check — always runs, even with no positions
+    alert_state, cmd_changed = handle_bot_commands(orders, current_price, alert_state)
+    if cmd_changed:
+        state_changed = True
+
     if not orders:
         print("No open positions found.")
+        if state_changed:
+            save_json(ALERT_STATE_DB, alert_state)
         return
 
     print(f"Checking {len(orders)} position(s) at ${current_price:,.2f}...\n")
 
-    alert_state = load_json(ALERT_STATE_DB, {})
-    state_changed = False
     alerts_sent = 0
     alerts_recovered = 0
 
