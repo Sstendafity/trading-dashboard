@@ -5,8 +5,8 @@
     "entry_price": 71195.0,
     "qty": 0.005,
     "liquidation": 55816.0,
-    "target": null,
-    "stop_loss": null,
+    "target": 80000.0,
+    "stop_loss": 73200.0,
     "added_at": "2026-04-12 02:31:40.604133",
     "alert_threshold": 3.0
   },
