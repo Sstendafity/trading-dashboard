@@ -881,6 +881,121 @@ if orders:
                     st.success(f"Position {o['account']} removed.")
                     st.rerun()
 
+# =========================================
+# PROJECTION FEATURE
+# =========================================
+# ==========================================
+# PROJECTION FEATURE
+# ==========================================
+
+st.markdown("---")
+st.markdown("### 🔮 Position Projection")
+st.caption("Simulate how your positions would look at a different BTC price.")
+
+proj_col1, proj_col2 = st.columns([2, 5])
+with proj_col1:
+    projected_price = st.number_input(
+        "Projected BTC Price (USD)",
+        min_value=0.0,
+        value=float(cp) if cp > 0 else 0.0,
+        step=100.0,
+        key="proj_price"
+    )
+
+if projected_price > 0 and orders:
+    proj_calcs = [calculate(o, projected_price) for o in orders]
+
+    # Summary
+    proj_total_inr = sum(c["running_inr"] for c in proj_calcs)
+    proj_profit = [o for o, c in zip(orders, proj_calcs) if c["running_inr"] > 0]
+    proj_loss = [o for o, c in zip(orders, proj_calcs) if c["running_inr"] < 0]
+    proj_liquidated = [
+        o for o, c in zip(orders, proj_calcs)
+        if o.get("liquidation") and (
+            (o["side"] == "Buy" and projected_price <= o["liquidation"]) or
+            (o["side"] == "Sell" and projected_price >= o["liquidation"])
+        )
+    ]
+
+    # Difference from current price
+    price_diff = projected_price - cp
+    price_diff_pct = ((projected_price - cp) / cp * 100) if cp > 0 else 0
+    diff_color = "#00e676" if price_diff >= 0 else "#ff1744"
+    diff_arrow = "▲" if price_diff >= 0 else "▼"
+
+    st.markdown(
+        f'<div style="margin-bottom:12px;font-size:13px;color:{diff_color}">'
+        f'{diff_arrow} ${abs(price_diff):,.1f} ({abs(price_diff_pct):.2f}%) '
+        f'{"above" if price_diff >= 0 else "below"} current price (${cp:,.1f})'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
+    # Liquidation warning
+    if proj_liquidated:
+        liq_accounts = ", ".join(o["account"] for o in proj_liquidated)
+        st.markdown(f"""
+        <div class="danger-zone">
+            💀 At ${projected_price:,.1f}, these positions would be <b>liquidated</b>: <b>{liq_accounts}</b>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Summary boxes
+    st.markdown("#### 📊 Projected Summary")
+    ps1, ps2, ps3, ps4, ps5 = st.columns(5)
+    net_color = "#00e676" if proj_total_inr >= 0 else "#ff1744"
+    with ps1: st.markdown(summary_box("Net P&L", fmt_inr(proj_total_inr), net_color), unsafe_allow_html=True)
+    with ps2: st.markdown(summary_box("Profit Positions", len(proj_profit), "#00e676"), unsafe_allow_html=True)
+    with ps3: st.markdown(summary_box("Loss Positions", len(proj_loss), "#ff1744"), unsafe_allow_html=True)
+    with ps4: st.markdown(summary_box("Liquidated", len(proj_liquidated), "#ff1744" if proj_liquidated else "#888"), unsafe_allow_html=True)
+    with ps5: st.markdown(summary_box("Total Positions", len(orders), "#fff"), unsafe_allow_html=True)
+
+    # Projection table
+    st.markdown("#### 📋 Projected Analysis")
+    proj_sorted = sorted(zip(orders, proj_calcs), key=lambda x: x[1]["running_inr"])
+    proj_rows = []
+    for o, c in proj_sorted:
+        liq = o.get("liquidation")
+        is_liquidated = liq and (
+            (o["side"] == "Buy" and projected_price <= liq) or
+            (o["side"] == "Sell" and projected_price >= liq)
+        )
+        danger_str = "💀 LIQUIDATED" if is_liquidated else (
+            f"{c['danger_pct']:.0f}% to Liq" if c["danger_pct"] is not None else "—"
+        )
+        proj_rows.append({
+            "Account": o["account"],
+            "Exchange": ACCOUNT_GROUP.get(o["account"], "—"),
+            "Side": o["side"],
+            "Entry": fmt_price(o.get("entry_price")),
+            "Qty (Lots)": btc_to_lots(o.get("qty", 0) or 0),
+            "EP×Proj": fmt_price(c["ep_cp_diff"]),
+            "Proj P&L (USD)": fmt_usd(c["running_usd"]),
+            "Proj P&L (INR)": fmt_inr(c["running_inr"]),
+            "Liq Price": fmt_price(o.get("liquidation")),
+            "Liq Status": danger_str,
+            "TG": fmt_price(o.get("target")),
+            "Profit at TG (INR)": fmt_inr(c["profit_inr"]),
+            "SL": fmt_price(o.get("stop_loss")),
+            "Loss at SL (INR)": fmt_inr(c["loss_inr"]),
+        })
+
+    proj_df = pd.DataFrame(proj_rows)
+
+    def style_proj_table(df):
+        def color_cells(val):
+            if isinstance(val, str):
+                if val.startswith("₹+") or val.startswith("$+"): return "color: #00e676; font-weight: bold"
+                if val.startswith("₹-") or val.startswith("$-"): return "color: #ff1744; font-weight: bold"
+                if val == "💀 LIQUIDATED": return "color: #ff1744; font-weight: bold"
+            return ""
+        return df.style.map(color_cells, subset=["Proj P&L (USD)", "Proj P&L (INR)", "Profit at TG (INR)", "Loss at SL (INR)", "Liq Status"])
+
+    st.dataframe(style_proj_table(proj_df), use_container_width=True, hide_index=True)
+
+elif projected_price > 0 and not orders:
+    st.info("No open positions to project.")
+    
 # ==========================================
 # SIDEBAR INFO
 # ==========================================
