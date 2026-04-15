@@ -55,19 +55,24 @@ st.markdown("""
 .price-down { color: #ff1744; }
 .price-neutral { color: var(--text-color); }
 .stat-label {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--text-color);
     opacity: 0.6;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 2px;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+    text-align: center;
+    line-height: 1.3;
 }
 .stat-value {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
     font-family: 'Courier New', monospace;
     color: var(--text-color);
+    word-break: break-word;
+    text-align: center;
 }
+            
 .badge-buy {
     background: rgba(0, 200, 83, 0.15);
     color: #00c853;
@@ -100,8 +105,13 @@ st.markdown("""
     background: var(--secondary-background-color);
     border: 1px solid rgba(128,128,128,0.15);
     border-radius: 10px;
-    padding: 14px;
+    padding: 14px 8px;
     text-align: center;
+    min-height: 90px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
 }
 .divider {
     border-top: 1px solid rgba(128,128,128,0.2);
@@ -299,9 +309,13 @@ def color_val(v):
     return "color:#00e676" if v >= 0 else "color:#ff1744"
 
 def summary_box(label, value, color=None):
-    color_style = f"color:{color}" if color else ""
-    return f'<div class="summary-box"><div class="stat-label">{label}</div><div class="stat-value" style="{color_style}">{value}</div></div>'
-
+    color_style = f"color:{color}" if color else "color:var(--text-color)"
+    return (
+        f'<div class="summary-box">'
+        f'<div class="stat-label">{label}</div>'
+        f'<div class="stat-value" style="{color_style}">{value}</div>'
+        f'</div>'
+    )
 # ==========================================
 # POPUP DIALOGS
 # ==========================================
