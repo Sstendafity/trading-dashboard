@@ -92,7 +92,7 @@
     "side": "Buy",
     "entry_price": 74206.0,
     "qty": 0.005,
-    "liquidation": 71423.5,
+    "liquidation": 66039.0,
     "target": null,
     "stop_loss": null,
     "added_at": "2026-04-14 01:11:25.949731",
