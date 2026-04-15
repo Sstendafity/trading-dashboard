@@ -39,8 +39,8 @@ ACCOUNT_GROUP = {
 st.markdown("""
 <style>
 .monitor-card {
-    background: #1a1a2e;
-    border: 1px solid #2a2a4a;
+    background: var(--secondary-background-color);
+    border: 1px solid rgba(128,128,128,0.2);
     border-radius: 12px;
     padding: 16px;
     margin-bottom: 10px;
@@ -51,12 +51,13 @@ st.markdown("""
     font-family: 'Courier New', monospace;
     letter-spacing: -1px;
 }
-.price-up { color: #00e676; }
+.price-up { color: #00c853; }
 .price-down { color: #ff1744; }
-.price-neutral { color: #ffffff; }
+.price-neutral { color: var(--text-color); }
 .stat-label {
     font-size: 11px;
-    color: #888;
+    color: var(--text-color);
+    opacity: 0.6;
     text-transform: uppercase;
     letter-spacing: 1px;
     margin-bottom: 2px;
@@ -65,11 +66,12 @@ st.markdown("""
     font-size: 18px;
     font-weight: 700;
     font-family: 'Courier New', monospace;
+    color: var(--text-color);
 }
 .badge-buy {
-    background: rgba(0, 230, 118, 0.15);
-    color: #00e676;
-    border: 1px solid #00e676;
+    background: rgba(0, 200, 83, 0.15);
+    color: #00c853;
+    border: 1px solid #00c853;
     padding: 2px 10px;
     border-radius: 4px;
     font-size: 11px;
@@ -92,15 +94,19 @@ st.markdown("""
     border-radius: 8px;
     padding: 8px 12px;
     font-size: 12px;
-    color: #ff6b6b;
+    color: #ff1744;
 }
 .summary-box {
-    background: #0f0f23;
+    background: var(--secondary-background-color);
+    border: 1px solid rgba(128,128,128,0.15);
     border-radius: 10px;
     padding: 14px;
     text-align: center;
 }
-.divider { border-top: 1px solid #2a2a4a; margin: 8px 0; }
+.divider {
+    border-top: 1px solid rgba(128,128,128,0.2);
+    margin: 8px 0;
+}
 div.stButton > button {
     white-space: nowrap;
     padding-left: 16px;
@@ -292,8 +298,9 @@ def color_val(v):
     if v is None: return "color:#888"
     return "color:#00e676" if v >= 0 else "color:#ff1744"
 
-def summary_box(label, value, color="#fff"):
-    return f'<div class="summary-box"><div class="stat-label">{label}</div><div class="stat-value" style="color:{color}">{value}</div></div>'
+def summary_box(label, value, color=None):
+    color_style = f"color:{color}" if color else ""
+    return f'<div class="summary-box"><div class="stat-label">{label}</div><div class="stat-value" style="{color_style}">{value}</div></div>'
 
 # ==========================================
 # POPUP DIALOGS
@@ -581,9 +588,9 @@ def live_dashboard(orders):
     with col_chg:
         st.markdown(f'<div class="stat-label">24h Change</div><div class="stat-value" style="{color_val(price_data["change_pct"])}">{change_arrow} {abs(price_data["change_pct"]):.2f}%</div>', unsafe_allow_html=True)
     with col_high:
-        st.markdown(f'<div class="stat-label">24h High</div><div class="stat-value" style="color:#fff">${price_data["high"]:,.1f}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="stat-label">24h High</div><div class="stat-value">${price_data["high"]:,.1f}</div>', unsafe_allow_html=True)
     with col_low:
-        st.markdown(f'<div class="stat-label">24h Low</div><div class="stat-value" style="color:#fff">${price_data["low"]:,.1f}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="stat-label">24h Low</div><div class="stat-value">${price_data["low"]:,.1f}</div>', unsafe_allow_html=True)
     with col_refresh:
         if st.button("🔄", help="Force refresh price"):
             st.session_state.pop("price_cache", None)
