@@ -1,20 +1,9 @@
 [
   {
-    "account": "A-2",
-    "side": "Buy",
-    "entry_price": 71195.0,
-    "qty": 0.005,
-    "liquidation": 55882.5,
-    "target": 80000.0,
-    "stop_loss": 73200.0,
-    "added_at": "2026-04-12 02:31:40.604133",
-    "alert_threshold": 3.0
-  },
-  {
     "account": "A-3",
     "side": "Buy",
     "entry_price": 70969.5,
-    "qty": 0.004,
+    "qty": 0.001,
     "liquidation": null,
     "target": null,
     "stop_loss": null,
@@ -46,8 +35,8 @@
   {
     "account": "A-7",
     "side": "Buy",
-    "entry_price": 68684.8,
-    "qty": 0.002,
+    "entry_price": 73705.8,
+    "qty": 0.006,
     "liquidation": 60062.6,
     "target": null,
     "stop_loss": null,
@@ -124,7 +113,7 @@
     "account": "A-11",
     "side": "Buy",
     "entry_price": 72422.4,
-    "qty": 0.005,
+    "qty": 0.001,
     "liquidation": 69008.6,
     "target": null,
     "stop_loss": null,
@@ -151,6 +140,28 @@
     "target": null,
     "stop_loss": null,
     "added_at": "2026-04-14 01:25:54.212770",
+    "alert_threshold": 3.0
+  },
+  {
+    "account": "A-6",
+    "side": "Sell",
+    "entry_price": 75000.0,
+    "qty": 0.002,
+    "liquidation": null,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-04-14 14:38:01.934611",
+    "alert_threshold": 3.0
+  },
+  {
+    "account": "A-2",
+    "side": "Buy",
+    "entry_price": 75272.0,
+    "qty": 0.01,
+    "liquidation": null,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-04-14 14:51:40.838736",
     "alert_threshold": 3.0
   }
 ]
