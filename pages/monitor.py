@@ -826,7 +826,7 @@ if orders:
         with st.expander(
             f"{o['account']} ({ACCOUNT_GROUP.get(o['account'], '?')}) — {side_label} — "
             f"Running: {fmt_inr(c['running_inr'])}",
-            expanded=(danger_pct >= 70)
+            expanded=False
         ):
             c1, c2, c3, c4 = st.columns(4)
 
@@ -995,7 +995,7 @@ if projected_price > 0 and orders:
 
 elif projected_price > 0 and not orders:
     st.info("No open positions to project.")
-    
+
 # ==========================================
 # SIDEBAR INFO
 # ==========================================
