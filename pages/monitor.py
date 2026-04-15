@@ -745,7 +745,7 @@ def live_dashboard(orders):
     with s1: st.markdown(summary_box("Net Running P&L", fmt_inr(total_running_inr), net_color), unsafe_allow_html=True)
     with s2: st.markdown(summary_box("Profit Positions", len(profit_orders), "#00e676"), unsafe_allow_html=True)
     with s3: st.markdown(summary_box("Loss Positions", len(loss_orders), "#ff1744"), unsafe_allow_html=True)
-    with s4: st.markdown(summary_box("Total Positions", len(orders), "#fff"), unsafe_allow_html=True)
+    with s4: st.markdown(summary_box("Total Positions", len(orders)), unsafe_allow_html=True)
     with s5: st.markdown(summary_box("Buy Lots", f"{btc_to_lots(buy_qty)}", "#00e676"), unsafe_allow_html=True)
     with s6: st.markdown(summary_box("Sell Lots", f"{btc_to_lots(sell_qty)}", "#ff1744"), unsafe_allow_html=True)
 
