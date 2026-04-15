@@ -1,0 +1,13 @@
+services:
+  - type: worker
+    name: btc-bot
+    runtime: python
+    buildCommand: pip install requests ccxt
+    startCommand: python bot.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: TELEGRAM_CHAT_ID_2
+        sync: false
