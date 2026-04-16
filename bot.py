@@ -38,7 +38,7 @@ REPO = "Sstendafity/trading-dashboard"
 USD_TO_INR = 85.0
 LOT_SIZE = 0.001
 POLL_INTERVAL = 3  # seconds between getUpdates calls
-ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 16)]
+ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 18)]
 
 def btc_to_lots(btc_qty):
     return round((btc_qty or 0) / LOT_SIZE)

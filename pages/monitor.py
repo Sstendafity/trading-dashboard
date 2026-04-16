@@ -25,11 +25,11 @@ LOT_SIZE = 0.001  # 1 lot = 0.001 BTC
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"] if "GITHUB_TOKEN" in st.secrets else None
 REPO_NAME = "Sstendafity/trading-dashboard"
 
-ACCOUNTS = [f"A-{i}" for i in range(1, 16)]
+ACCOUNTS = [f"A-{i}" for i in range(1, 18)]
 ACCOUNT_GROUP = {
     "A-1": "Delta", "A-2": "Delta", "A-3": "Delta", "A-4": "Delta", "A-5": "Delta", "A-6": "Delta",
     "A-7": "CS", "A-8": "CS", "A-9": "CS", "A-10": "CS", "A-11": "CS",
-    "A-12": "Pi42", "A-13": "CDX", "A-14": "MDX", "A-15": "ZEP"
+    "A-12": "Pi42", "A-13": "CDX", "A-14": "MDX", "A-15": "ZEP", "A-16": "BN", "A-17": "BYT"
 }
 
 # ==========================================
@@ -512,7 +512,7 @@ def telegram_command_listener(orders, cp):
                 order_pnls = []
                 # Add this after order_pnls is built, before the msg assembly
 
-                ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 16)]
+                ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 18)]
                 active_accounts = {o.get("account") for o in orders}
                 inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
 
@@ -641,7 +641,7 @@ def live_dashboard(orders):
             order_pnls = []
             # Add this after order_pnls is built, before the msg assembly
 
-            ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 16)]
+            ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 18)]
             active_accounts = {o.get("account") for o in orders}
             inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
 

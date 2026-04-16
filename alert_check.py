@@ -264,7 +264,7 @@ def build_report_msg(orders, current_price):
     order_pnls = []
     # Add this after order_pnls is built, before the msg assembly
 
-    ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 16)]
+    ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 18)]
     active_accounts = {o.get("account") for o in orders}
     inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
 

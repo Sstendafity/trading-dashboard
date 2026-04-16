@@ -118,7 +118,6 @@ def save_to_master(new_df):
     combined = pd.concat([old_df, new_df], ignore_index=True)
     
     # --- ADD THIS: Normalize Account Names before saving (A6 -> A-6) ---
-    # --- ADD THIS: Normalize Account Names before saving (A6 -> A-6) ---
     if 'Account' in combined.columns:
         combined['Account'] = combined['Account'].astype(str).apply(lambda x: re.sub(r'^([a-zA-Z]+)(\d+)$', r'\1-\2', x.strip()))
         
@@ -723,6 +722,8 @@ else:
                 elif acc_upper == 'A-13': grp_label = 'CDX'
                 elif acc_upper == 'A-14': grp_label = 'Mudrex'
                 elif acc_upper == 'A-15': grp_label = 'Zebpay'
+                elif acc_upper == 'A-16': grp_label = 'Binance'
+                elif acc_upper == 'A-17': grp_label = 'Bybit'
                 else: grp_label = 'Other'
                 
                 acc_net_color = "green" if acc_net > 0 else ("red" if acc_net < 0 else "normal")
