@@ -10,6 +10,7 @@ from github import Github
 import sys
 sys.path.insert(0, os.getcwd())
 from auth import check_password
+import math
 
 # if not check_password():
 #     st.stop()
@@ -442,7 +443,7 @@ def dialog_edit_position(orders, idx):
 # ==========================================
 @st.fragment(run_every=5)
 def telegram_command_listener(orders, cp):
-    """Polls Telegram every 5s for /report command. Runs inside Streamlit — instant response."""
+    """Polls Telegram every 5s for commands. Runs inside Streamlit — instant response."""
     TELEGRAM_TOKEN_UI = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_CHAT_IDS_UI = [
         st.secrets.get("TELEGRAM_CHAT_ID", ""),
@@ -453,7 +454,10 @@ def telegram_command_listener(orders, cp):
     if not TELEGRAM_TOKEN_UI:
         return
 
-    # Get last processed update_id from session state
+    # ==========================================
+    # POLL TELEGRAM FOR COMMANDS
+    # ==========================================
+
     offset = st.session_state.get("tg_last_update_id", None)
     params = {"timeout": 0, "limit": 10}
     if offset is not None:
@@ -471,21 +475,23 @@ def telegram_command_listener(orders, cp):
     except Exception:
         return
 
-    if not updates:
-        return
-
     new_last_id = offset or 0
+
     for update in updates:
         update_id = update.get("update_id", 0)
         new_last_id = max(new_last_id, update_id)
 
         message = update.get("message", {})
-        text = message.get("text", "").strip().lower()
+        raw_text = message.get("text", "").strip()
+        text = raw_text.lower()
         chat_id = str(message.get("chat", {}).get("id", ""))
 
         if not chat_id:
             continue
 
+        # ==========================================
+        # /report
+        # ==========================================
         if text.startswith("/report"):
             if not orders:
                 msg = "⚪ No open positions at the moment."
@@ -493,10 +499,6 @@ def telegram_command_listener(orders, cp):
                 # Fetch fresh price at the moment /report is received
                 fresh = _do_fetch()
                 cp = fresh["price"] if fresh else st.session_state.get("current_cp", 0)
-
-                # Build report
-                total_inr, total_usd = 0, 0
-                now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
                 total_usd = 0
                 total_profit = 0
@@ -507,14 +509,12 @@ def telegram_command_listener(orders, cp):
                 buy_qty = 0
                 sell_qty = 0
                 lines = []
-
-                # Calculate P&L for all orders first
                 order_pnls = []
-                # Add this after order_pnls is built, before the msg assembly
 
                 ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 18)]
                 active_accounts = {o.get("account") for o in orders}
                 inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
+                now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
                 for o in orders:
                     running_usd = (cp - o.get("entry_price", 0)) * o.get("qty", 0) if o.get("side") == "Buy" else (o.get("entry_price", 0) - cp) * o.get("qty", 0)
@@ -533,7 +533,6 @@ def telegram_command_listener(orders, cp):
                     else:
                         sell_qty += o.get("qty", 0) or 0
 
-                # Sort highest profit to lowest loss
                 order_pnls.sort(key=lambda x: x[2], reverse=True)
 
                 for o, running_usd, running_inr in order_pnls:
@@ -576,7 +575,146 @@ def telegram_command_listener(orders, cp):
                 timeout=10
             )
 
+        # ==========================================
+        # /setuppricealert
+        # ==========================================
+        elif text.startswith("/setuppricealert"):
+            st.session_state["awaiting_interval_chat"] = chat_id
+            requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+                json={"chat_id": chat_id, "text":
+                    f"🔔 <b>Price Interval Alert Setup</b>\n"
+                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"Please send the price interval you want to be alerted at.\n\n"
+                    f"<b>Example:</b> Send <code>500</code> to get alerted every $500 move.\n\n"
+                    f"Current BTC price: <code>${cp:,.0f}</code>\n"
+                    f"With interval $500:\n"
+                    f"→ ↑ Alerts at ${cp+500:,.0f} · ${cp+1000:,.0f} · ${cp+1500:,.0f}\n"
+                    f"→ ↓ Alerts at ${cp-500:,.0f} · ${cp-1000:,.0f} · ${cp-1500:,.0f}",
+                    "parse_mode": "HTML"},
+                timeout=10
+            )
+
+        # ==========================================
+        # /stoppricealert
+        # ==========================================
+        elif text.startswith("/stoppricealert"):
+            if st.session_state.get("price_alert_active"):
+                interval = st.session_state.get("price_alert_interval", 0)
+                st.session_state["price_alert_active"] = False
+                st.session_state.pop("awaiting_interval_chat", None)
+                requests.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+                    json={"chat_id": chat_id, "text":
+                        f"🛑 <b>Price Alert Stopped</b>\n"
+                        f"━━━━━━━━━━━━━━━━━━\n"
+                        f"Interval <code>${interval:,.0f}</code> alert has been deactivated.\n"
+                        f"Use /setuppricealert to start a new one.",
+                        "parse_mode": "HTML"},
+                    timeout=10
+                )
+            else:
+                requests.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+                    json={"chat_id": chat_id,
+                          "text": "⚪ No active price interval alert to stop."},
+                    timeout=10
+                )
+
+        # ==========================================
+        # Interval number input
+        # (sent after /setuppricealert)
+        # ==========================================
+        elif st.session_state.get("awaiting_interval_chat") == chat_id:
+            try:
+                interval = float(raw_text.replace(",", "").strip())
+                if interval <= 0:
+                    raise ValueError("Interval must be positive")
+
+                base = cp
+                last_level = base - (base % interval) if interval else base
+
+                st.session_state["price_alert_active"] = True
+                st.session_state["price_alert_interval"] = interval
+                st.session_state["price_alert_base"] = base
+                st.session_state["price_alert_last_level"] = last_level
+                st.session_state["price_alert_setup_chat"] = chat_id
+                st.session_state.pop("awaiting_interval_chat", None)
+
+                requests.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+                    json={"chat_id": chat_id, "text":
+                        f"✅ <b>Price Alert Activated!</b>\n"
+                        f"━━━━━━━━━━━━━━━━━━\n"
+                        f"📏 Interval: <code>${interval:,.0f}</code>\n"
+                        f"📍 Base Price: <code>${base:,.1f}</code>\n"
+                        f"🎯 First alerts at:\n"
+                        f"   ↑ <code>${base + interval:,.1f}</code>\n"
+                        f"   ↓ <code>${base - interval:,.1f}</code>\n"
+                        f"━━━━━━━━━━━━━━━━━━\n"
+                        f"Use /stoppricealert to stop.",
+                        "parse_mode": "HTML"},
+                    timeout=10
+                )
+
+            except ValueError:
+                requests.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+                    json={"chat_id": chat_id,
+                          "text": "❌ Invalid interval. Please send a number, e.g. <code>500</code>",
+                          "parse_mode": "HTML"},
+                    timeout=10
+                )
+
     st.session_state["tg_last_update_id"] = new_last_id
+
+    # ==========================================
+    # PRICE INTERVAL ALERT CHECK
+    # Runs every 5s when alert is active
+    # ==========================================
+    if st.session_state.get("price_alert_active") and cp > 0:
+        interval = st.session_state.get("price_alert_interval", 0)
+        last_level = st.session_state.get("price_alert_last_level", 0)
+
+        if interval <= 0:
+            return
+
+        # Calculate which level current price is at
+        current_level = math.floor(cp / interval) * interval
+
+        if current_level != last_level and last_level != 0:
+            direction = "📈" if current_level > last_level else "📉"
+            levels_crossed = abs(int((current_level - last_level) / interval))
+
+            alert_msg = (
+                f"🔔 <b>PRICE INTERVAL ALERT</b>\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"{direction} BTC crossed a new level!\n"
+                f"📊 Current Price: <code>${cp:,.1f}</code>\n"
+                f"🎯 Level Reached: <code>${current_level:,.1f}</code>\n"
+                f"📏 Interval: <code>${interval:,.0f}</code>\n"
+            )
+            if levels_crossed > 1:
+                alert_msg += f"⚡ Skipped <b>{levels_crossed - 1}</b> level(s)\n"
+            alert_msg += (
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"Next: ↑ <code>${current_level + interval:,.1f}</code> | "
+                f"↓ <code>${current_level - interval:,.1f}</code>"
+            )
+
+            # Send to all chat IDs
+            for cid in TELEGRAM_CHAT_IDS_UI:
+                requests.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+                    json={"chat_id": cid, "text": alert_msg, "parse_mode": "HTML"},
+                    timeout=10
+                )
+
+            st.session_state["price_alert_last_level"] = current_level
+
+        elif last_level == 0:
+            # First run after setup — initialize last_level silently
+            st.session_state["price_alert_last_level"] = current_level
 
 @st.fragment(run_every=30)
 def live_dashboard(orders):
@@ -799,6 +937,16 @@ def live_dashboard(orders):
 st.title("⚡ Live Order Monitor")
 
 orders = load_orders()
+
+# Price interval alert state
+if "price_alert_active" not in st.session_state:
+    st.session_state["price_alert_active"] = False
+if "price_alert_interval" not in st.session_state:
+    st.session_state["price_alert_interval"] = 0
+if "price_alert_base" not in st.session_state:
+    st.session_state["price_alert_base"] = 0
+if "price_alert_last_level" not in st.session_state:
+    st.session_state["price_alert_last_level"] = 0
 
 telegram_command_listener(orders, st.session_state.get("current_cp", 0))
 live_dashboard(orders)
