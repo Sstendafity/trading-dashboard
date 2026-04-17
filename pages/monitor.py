@@ -799,10 +799,12 @@ def live_dashboard(orders):
 st.title("⚡ Live Order Monitor")
 
 orders = load_orders()
-cp = st.session_state.get("current_cp", 0)
 
-telegram_command_listener(orders, cp)
+telegram_command_listener(orders, st.session_state.get("current_cp", 0))
 live_dashboard(orders)
+
+# Get cp AFTER live_dashboard has set it
+cp = st.session_state.get("current_cp", 0)
 
 # ==========================================
 # ADD POSITION BUTTON
@@ -902,9 +904,6 @@ if orders:
                     st.success(f"Position {o['account']} removed.")
                     st.rerun()
 
-# =========================================
-# PROJECTION FEATURE
-# =========================================
 # ==========================================
 # PROJECTION FEATURE
 # ==========================================
