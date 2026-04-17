@@ -579,7 +579,13 @@ def telegram_command_listener(orders, cp):
         # /setuppricealert
         # ==========================================
         elif text.startswith("/setuppricealert"):
+            # Fetch fresh price if cp is 0
+            if cp <= 0:
+                fresh = _do_fetch()
+                cp = fresh["price"] if fresh else 0
+
             st.session_state["awaiting_interval_chat"] = chat_id
+            st.session_state["price_alert_current_cp"] = cp  # store for interval handler
             requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
                 json={"chat_id": chat_id, "text":
@@ -631,7 +637,21 @@ def telegram_command_listener(orders, cp):
                 if interval <= 0:
                     raise ValueError("Interval must be positive")
 
-                base = cp
+                # Use stored price from setup time, or fetch fresh if still 0
+                base = st.session_state.get("price_alert_current_cp", cp)
+                if base <= 0:
+                    fresh = _do_fetch()
+                    base = fresh["price"] if fresh else 0
+
+                if base <= 0:
+                    requests.post(
+                        f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+                        json={"chat_id": chat_id,
+                            "text": "❌ Could not fetch current BTC price. Please try again."},
+                        timeout=10
+                    )
+                    return
+                
                 last_level = base - (base % interval) if interval else base
 
                 st.session_state["price_alert_active"] = True
