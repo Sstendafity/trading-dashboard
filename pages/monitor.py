@@ -585,7 +585,7 @@ def telegram_command_listener(orders, cp):
                 cp = fresh["price"] if fresh else 0
 
             st.session_state["awaiting_interval_chat"] = chat_id
-            st.session_state["price_alert_current_cp"] = cp  # store for interval handler
+            st.session_state["price_alert_current_cp"] = cp
             requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
                 json={"chat_id": chat_id, "text":
@@ -651,7 +651,7 @@ def telegram_command_listener(orders, cp):
                         timeout=10
                     )
                     return
-                
+
                 last_level = round(base / interval) * interval
 
                 st.session_state["price_alert_active"] = True
@@ -690,52 +690,65 @@ def telegram_command_listener(orders, cp):
 
     # ==========================================
     # PRICE INTERVAL ALERT CHECK
-    # Runs every 5s when alert is active
+    # Runs every 5s regardless of Telegram messages
+    # Always fetches fresh price — never uses stale cp
     # ==========================================
-    if st.session_state.get("price_alert_active") and cp > 0:
-        interval = st.session_state.get("price_alert_interval", 0)
-        last_level = st.session_state.get("price_alert_last_level", 0)
+    if not st.session_state.get("price_alert_active"):
+        return
 
-        if interval <= 0:
-            return
+    interval = st.session_state.get("price_alert_interval", 0)
+    last_level = st.session_state.get("price_alert_last_level", 0)
 
-        # Calculate which level current price is at
-        current_level = round(cp / interval) * interval
+    if interval <= 0:
+        return
 
-        if current_level != last_level and last_level != 0:
-            direction = "📈" if current_level > last_level else "📉"
-            levels_crossed = abs(int((current_level - last_level) / interval))
+    # Always fetch fresh price for accurate level detection
+    try:
+        fresh = _do_fetch()
+        live_cp = fresh["price"] if fresh and fresh.get("price", 0) > 0 else 0
+    except Exception:
+        return
 
-            alert_msg = (
-                f"🔔 <b>PRICE INTERVAL ALERT</b>\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"{direction} BTC crossed a new level!\n"
-                f"📊 Current Price: <code>${cp:,.1f}</code>\n"
-                f"🎯 Level Reached: <code>${current_level:,.1f}</code>\n"
-                f"📏 Interval: <code>${interval:,.0f}</code>\n"
+    if live_cp <= 0:
+        return
+
+    current_level = round(live_cp / interval) * interval
+
+    if last_level == 0:
+        # First run after setup — initialize silently, no alert
+        st.session_state["price_alert_last_level"] = current_level
+        return
+
+    if current_level != last_level:
+        direction = "📈" if current_level > last_level else "📉"
+        levels_crossed = abs(int(round((current_level - last_level) / interval)))
+
+        alert_msg = (
+            f"🔔 <b>PRICE INTERVAL ALERT</b>\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"{direction} BTC crossed a new level!\n"
+            f"📊 Current Price: <code>${live_cp:,.1f}</code>\n"
+            f"🎯 Level Reached: <code>${current_level:,.1f}</code>\n"
+            f"📏 Interval: <code>${interval:,.0f}</code>\n"
+        )
+        if levels_crossed > 1:
+            alert_msg += f"⚡ Skipped <b>{levels_crossed - 1}</b> level(s)\n"
+        alert_msg += (
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"Next: ↑ <code>${current_level + interval:,.1f}</code> | "
+            f"↓ <code>${current_level - interval:,.1f}</code>"
+        )
+
+        # Send only to the chat that set up the alert
+        alert_chat = st.session_state.get("price_alert_setup_chat", "")
+        if alert_chat:
+            requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+                json={"chat_id": alert_chat, "text": alert_msg, "parse_mode": "HTML"},
+                timeout=10
             )
-            if levels_crossed > 1:
-                alert_msg += f"⚡ Skipped <b>{levels_crossed - 1}</b> level(s)\n"
-            alert_msg += (
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"Next: ↑ <code>${current_level + interval:,.1f}</code> | "
-                f"↓ <code>${current_level - interval:,.1f}</code>"
-            )
 
-           # Send only to the chat that set up the alert
-            alert_chat = st.session_state.get("price_alert_setup_chat", "")
-            if alert_chat:
-                requests.post(
-                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
-                    json={"chat_id": alert_chat, "text": alert_msg, "parse_mode": "HTML"},
-                    timeout=10
-                )
-
-            st.session_state["price_alert_last_level"] = current_level
-
-        elif last_level == 0:
-            # First run after setup — initialize last_level silently
-            st.session_state["price_alert_last_level"] = current_level
+        st.session_state["price_alert_last_level"] = current_level
 
 @st.fragment(run_every=30)
 def live_dashboard(orders):
