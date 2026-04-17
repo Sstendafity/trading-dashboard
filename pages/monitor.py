@@ -652,7 +652,7 @@ def telegram_command_listener(orders, cp):
                     )
                     return
                 
-                last_level = base - (base % interval) if interval else base
+                last_level = round(base / interval) * interval
 
                 st.session_state["price_alert_active"] = True
                 st.session_state["price_alert_interval"] = interval
@@ -700,7 +700,7 @@ def telegram_command_listener(orders, cp):
             return
 
         # Calculate which level current price is at
-        current_level = math.floor(cp / interval) * interval
+        current_level = round(cp / interval) * interval
 
         if current_level != last_level and last_level != 0:
             direction = "📈" if current_level > last_level else "📉"
