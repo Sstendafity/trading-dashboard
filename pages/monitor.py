@@ -722,11 +722,12 @@ def telegram_command_listener(orders, cp):
                 f"↓ <code>${current_level - interval:,.1f}</code>"
             )
 
-            # Send to all chat IDs
-            for cid in TELEGRAM_CHAT_IDS_UI:
+           # Send only to the chat that set up the alert
+            alert_chat = st.session_state.get("price_alert_setup_chat", "")
+            if alert_chat:
                 requests.post(
                     f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
-                    json={"chat_id": cid, "text": alert_msg, "parse_mode": "HTML"},
+                    json={"chat_id": alert_chat, "text": alert_msg, "parse_mode": "HTML"},
                     timeout=10
                 )
 
