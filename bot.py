@@ -36,8 +36,8 @@ REPO = "Sstendafity/trading-dashboard"
 
 USD_TO_INR = 85.0
 LOT_SIZE = 0.001
-POLL_INTERVAL = 3        # seconds between getUpdates calls
-PRICE_CHECK_INTERVAL = 10  # seconds between price checks for interval alerts
+POLL_INTERVAL = 3
+PRICE_CHECK_INTERVAL = 10
 
 ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 16)]
 
@@ -46,19 +46,10 @@ def btc_to_lots(btc_qty):
 
 # ==========================================
 # PRICE INTERVAL ALERT STATE
-# Stored in memory — per chat_id
-# {
-#   chat_id: {
-#     "active": True,
-#     "interval": 500,
-#     "base_price": 75000,
-#     "last_level": 75000,  # last price level that triggered
-#   }
-# }
 # ==========================================
 
-price_alert_configs = {}   # chat_id → config
-awaiting_interval = {}     # chat_id → True (waiting for user to input interval)
+price_alert_configs = {}
+awaiting_interval = {}
 
 # ==========================================
 # PRICE FETCHING
@@ -141,6 +132,26 @@ def load_orders():
         except Exception as e:
             print(f"GitHub fetch failed: {e}")
     return []
+
+ALERT_CONFIG_FILE = "price_alert_configs.json"
+
+def save_alert_configs():
+    """Persist alert configs to disk so they survive restarts."""
+    try:
+        with open(ALERT_CONFIG_FILE, "w") as f:
+            json.dump(price_alert_configs, f, indent=2)
+    except Exception as e:
+        print(f"Failed to save alert configs: {e}")
+
+def load_alert_configs():
+    """Load alert configs from disk on startup."""
+    if os.path.exists(ALERT_CONFIG_FILE):
+        try:
+            with open(ALERT_CONFIG_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
 
 # ==========================================
 # TELEGRAM
@@ -257,14 +268,10 @@ def build_report(orders, current_price):
 # ==========================================
 
 def get_current_level(price, base_price, interval):
-    steps = round((price - base_price) / interval)  # ← round instead of floor
+    steps = round((price - base_price) / interval)
     return base_price + steps * interval
 
 def check_price_alerts(current_price):
-    """
-    Check all active price interval alerts.
-    If price has crossed into a new interval level, send alert.
-    """
     for chat_id, config in list(price_alert_configs.items()):
         if not config.get("active"):
             continue
@@ -280,7 +287,7 @@ def check_price_alerts(current_price):
             levels_crossed = abs(int((current_level - last_level) / interval))
 
             msg = (
-                f"{direction} <b>BTC ${current_price:,.1f}</b>\n"
+                f"{direction} <b>BTC ${round(current_price, -2)}</b>\n"
                 f"Level: <code>${current_level:,.0f}</code> | Interval: <code>${interval:,.0f}</code>"
             )
             if levels_crossed > 1:
@@ -288,6 +295,7 @@ def check_price_alerts(current_price):
 
             send_telegram(msg, chat_id)
             price_alert_configs[chat_id]["last_level"] = current_level
+            save_alert_configs()
             print(f"🔔 Price alert sent to {chat_id} — level ${current_level:,.1f}")
 
 # ==========================================
@@ -295,7 +303,6 @@ def check_price_alerts(current_price):
 # ==========================================
 
 def handle_setup_price_alert(chat_id):
-    """Start the /setuppricealert flow."""
     awaiting_interval[chat_id] = True
     send_telegram(
         f"🔔 <b>Price Interval Alert Setup</b>\n"
@@ -310,7 +317,6 @@ def handle_setup_price_alert(chat_id):
     print(f"📲 /setuppricealert from {chat_id} — awaiting interval")
 
 def handle_interval_input(chat_id, text, current_price):
-    """Handle the interval number sent after /setuppricealert."""
     try:
         interval = float(text.replace(",", "").strip())
         if interval <= 0:
@@ -323,6 +329,7 @@ def handle_interval_input(chat_id, text, current_price):
             "last_level": get_current_level(current_price, current_price, interval),
         }
         awaiting_interval.pop(chat_id, None)
+        save_alert_configs()  # persist immediately
 
         send_telegram(
             f"✅ <b>Price Alert Activated!</b>\n"
@@ -346,9 +353,12 @@ def handle_interval_input(chat_id, text, current_price):
         print(f"❌ Invalid interval input from {chat_id}: '{text}'")
 
 def handle_stop_price_alert(chat_id):
-    """Stop price interval alert for this chat."""
     if chat_id in price_alert_configs and price_alert_configs[chat_id].get("active"):
         config = price_alert_configs[chat_id]
+        price_alert_configs[chat_id]["active"] = False
+        awaiting_interval.pop(chat_id, None)
+        save_alert_configs()  # persist immediately
+
         send_telegram(
             f"🛑 <b>Price Alert Stopped</b>\n"
             f"━━━━━━━━━━━━━━━━━━\n"
@@ -356,8 +366,6 @@ def handle_stop_price_alert(chat_id):
             f"Use /setuppricealert to start a new one.",
             chat_id
         )
-        price_alert_configs[chat_id]["active"] = False
-        awaiting_interval.pop(chat_id, None)
         print(f"🛑 Price alert stopped for {chat_id}")
     else:
         send_telegram(
@@ -370,6 +378,12 @@ def handle_stop_price_alert(chat_id):
 # ==========================================
 
 def main():
+    global price_alert_configs
+    price_alert_configs = load_alert_configs()
+    if price_alert_configs:
+        active = [c for c, v in price_alert_configs.items() if v.get("active")]
+        print(f"📂 Loaded {len(price_alert_configs)} alert config(s), {len(active)} active")
+
     print("=" * 40)
     print("🤖 BTC Bot started")
     print(f"Time: {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
@@ -434,7 +448,6 @@ def main():
 
             # ==========================================
             # 2. CHECK PRICE INTERVAL ALERTS
-            # Only runs if there are active alerts
             # ==========================================
             active_alerts = [c for c in price_alert_configs.values() if c.get("active")]
             if active_alerts:
