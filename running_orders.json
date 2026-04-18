@@ -166,9 +166,9 @@
   },
   {
     "account": "A-6",
-    "side": "Sell",
-    "entry_price": 77524.0,
-    "qty": 0.002,
+    "side": "Buy",
+    "entry_price": 77292.5,
+    "qty": 0.005,
     "liquidation": null,
     "target": null,
     "stop_loss": null,
