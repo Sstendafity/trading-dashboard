@@ -285,9 +285,9 @@ def check_price_alerts(current_price):
         if current_level != last_level:
             direction = "📈" if current_level > last_level else "📉"
             levels_crossed = abs(int((current_level - last_level) / interval))
-
+            rounded_price = round(current_price / 100) * 100
             msg = (
-                f"{direction} <b>BTC ${round(current_price, -2)}</b>\n"
+                f"{direction} <b>BTC ${rounded_price:,.0f}</b>\n"
                 f"Level: <code>${current_level:,.0f}</code> | Interval: <code>${interval:,.0f}</code>"
             )
             if levels_crossed > 1:
