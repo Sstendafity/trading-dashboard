@@ -257,11 +257,7 @@ def build_report(orders, current_price):
 # ==========================================
 
 def get_current_level(price, base_price, interval):
-    """
-    Returns the nearest lower interval level from base_price.
-    e.g. base=75000, interval=500, price=75750 → level=75500
-    """
-    steps = math.floor((price - base_price) / interval)
+    steps = round((price - base_price) / interval)  # ← round instead of floor
     return base_price + steps * interval
 
 def check_price_alerts(current_price):
