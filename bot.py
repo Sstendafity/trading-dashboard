@@ -284,22 +284,11 @@ def check_price_alerts(current_price):
             levels_crossed = abs(int((current_level - last_level) / interval))
 
             msg = (
-                f"🔔 <b>PRICE INTERVAL ALERT</b>\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"{direction} BTC crossed a new level!\n"
-                f"📊 Current Price: <code>${current_price:,.1f}</code>\n"
-                f"🎯 Level Reached: <code>${current_level:,.1f}</code>\n"
-                f"📏 Interval: <code>${interval:,.0f}</code>\n"
-                f"📍 Base Price: <code>${base_price:,.1f}</code>\n"
+                f"{direction} <b>BTC ${current_price:,.1f}</b>\n"
+                f"Level: <code>${current_level:,.0f}</code> | Interval: <code>${interval:,.0f}</code>"
             )
             if levels_crossed > 1:
-                msg += f"⚡ Skipped <b>{levels_crossed - 1}</b> level(s)\n"
-            msg += (
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"Next levels: "
-                f"<code>${current_level + interval:,.1f}</code> ↑ | "
-                f"<code>${current_level - interval:,.1f}</code> ↓"
-            )
+                msg += f"\n⚡ Skipped {levels_crossed - 1} level(s)"
 
             send_telegram(msg, chat_id)
             price_alert_configs[chat_id]["last_level"] = current_level
