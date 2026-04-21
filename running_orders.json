@@ -123,9 +123,9 @@
   {
     "account": "A-1",
     "side": "Buy",
-    "entry_price": 74163.5,
-    "qty": 0.002,
-    "liquidation": 71382.5,
+    "entry_price": 75282.0,
+    "qty": 0.004,
+    "liquidation": 72450.0,
     "target": null,
     "stop_loss": null,
     "added_at": "2026-04-20 00:50:01.127814",
