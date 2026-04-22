@@ -548,24 +548,25 @@ def telegram_command_listener(orders, cp):
                 total_emoji = "📈" if total_inr >= 0 else "📉"
 
                 msg = (
-                    f"📊 <b>INSTANT PORTFOLIO REPORT</b>\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🕐 {now}\n"
-                    f"₿ BTC Price: <code>${cp:,.1f}</code>\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
+                    f"<b>INSTANT PORTFOLIO REPORT</b>\n"
+                    f"\n"
+                    f"{now}\n"
+                    f"<b>₿ BTC Price</b>: <code>${cp:,.1f}</code>\n"
+                    f"\n"
                 )
                 msg += "\n".join(lines)
                 msg += (
-                    f"\n━━━━━━━━━━━━━━━━━━\n"
-                    f"{total_emoji} <b>Net Running P&L</b>: "
+                    f"\n"
+                    f"\n"
+                    f"<b>Net Running P&L</b>: "
                     f"<code>{total_sign}₹{total_inr:,.0f}</code> "
                     f"(<code>{total_sign}${total_usd:,.2f}</code>)\n"
-                    f"✅ Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
-                    f"❌ Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
-                    f"📋 Total Orders: {len(orders)}\n"
-                    f"📦 Buy Qty: {btc_to_lots(buy_qty)} lots\n"
-                    f"📦 Sell Qty: {btc_to_lots(sell_qty)} lots\n"
-                    f"⚪ Idle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
+                    f"Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
+                    f"Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
+                    f"Total Orders: {len(orders)}\n"
+                    f"Buy Qty: {btc_to_lots(buy_qty)} lots\n"
+                    f"Sell Qty: {btc_to_lots(sell_qty)} lots\n"
+                    f"Idle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
                 )
 
             # Reply only to the requester
@@ -850,24 +851,25 @@ def live_dashboard(orders):
             total_emoji = "📈" if total_inr >= 0 else "📉"
 
             msg = (
-                f"📊 <b>INSTANT PORTFOLIO REPORT</b>\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"🕐 {now}\n"
-                f"₿ BTC Price: <code>${cp:,.1f}</code>\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
+                f"<b>INSTANT PORTFOLIO REPORT</b>\n"
+                f"\n"
+                f"{now}\n"
+                f"<b>₿ BTC Price</b>: <code>${cp:,.1f}</code>\n"
+                f"\n"
             )
             msg += "\n".join(lines)
             msg += (
-                f"\n━━━━━━━━━━━━━━━━━━\n"
-                f"{total_emoji} <b>Net Running P&L</b>: "
+                f"\n"
+                f"\n"
+                f"<b>Net Running P&L</b>: "
                 f"<code>{total_sign}₹{total_inr:,.0f}</code> "
                 f"(<code>{total_sign}${total_usd:,.2f}</code>)\n"
-                f"✅ Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
-                f"❌ Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
-                f"📋 Total Orders: {len(orders)}\n"
-                f"📦 Buy Qty: {btc_to_lots(buy_qty)} lots\n"
-                f"📦 Sell Qty: {btc_to_lots(sell_qty)} lots\n"
-                f"⚪ Idle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
+                f"Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
+                f"Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
+                f"Total Orders: {len(orders)}\n"
+                f"Buy Qty: {btc_to_lots(buy_qty)} lots\n"
+                f"Sell Qty: {btc_to_lots(sell_qty)} lots\n"
+                f"Idle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
             )
 
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
