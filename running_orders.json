@@ -90,9 +90,9 @@
   {
     "account": "A-7",
     "side": "Sell",
-    "entry_price": 75300.5,
-    "qty": 0.002,
-    "liquidation": 82261.9,
+    "entry_price": 76150.3,
+    "qty": 0.004,
+    "liquidation": 80967.0,
     "target": null,
     "stop_loss": null,
     "added_at": "2026-04-17 08:48:00.913695",
