@@ -300,8 +300,6 @@ def build_report_msg(orders, current_price):
     total_emoji = "📈" if total_inr >= 0 else "📉"
 
     msg = (
-        f"<b>15-MIN PORTFOLIO REPORT</b>\n"
-        f"\n"
         f"{now}\n"
         f"<b>₿ BTC Price</b>: <code>${current_price:,.1f}</code>\n"
         f"<b>Net Running P&L</b>: "
