@@ -548,7 +548,6 @@ def telegram_command_listener(orders, cp):
                 total_emoji = "📈" if total_inr >= 0 else "📉"
 
                 msg = (
-                    f"{now}\n"
                     f"<b>CP</b>: <code>${cp:,.1f}</code>\n"
                     f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
                     f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
@@ -847,7 +846,6 @@ def live_dashboard(orders):
             total_emoji = "📈" if total_inr >= 0 else "📉"
 
             msg = (
-                f"{now}\n"
                 f"<b>CP</b>: <code>${cp:,.1f}</code>\n"
                 f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
                 f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
