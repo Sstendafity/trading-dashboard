@@ -249,17 +249,17 @@ def build_report(orders, current_price):
         f"<b>Net Running P&L</b>: "
         f"<code>{total_sign}₹{total_inr:,.0f}</code> "
         f"(<code>{total_sign}${total_usd:,.2f}</code>)\n"
+        f"Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
+        f"Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
+        f"Total Orders: {len(orders)}\n"
+        f"Buy Qty: {btc_to_lots(buy_qty)} lots\n"
+        f"Sell Qty: {btc_to_lots(sell_qty)} lots\n"
         f"\n"
     )
     msg += "\n".join(lines)
     msg += (
         f"\n"
         f"\n"
-        f"Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
-        f"Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
-        f"Total Orders: {len(orders)}\n"
-        f"Buy Qty: {btc_to_lots(buy_qty)} lots\n"
-        f"Sell Qty: {btc_to_lots(sell_qty)} lots\n"
         f"Idle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
     )
     return msg
