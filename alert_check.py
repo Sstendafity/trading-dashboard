@@ -300,7 +300,7 @@ def build_report_msg(orders, current_price):
     total_emoji = "📈" if total_inr >= 0 else "📉"
 
     msg = (
-        f"<b>CP</b>: <code>${cp:,.1f}</code>\n"
+        f"<b>CP</b>: <code>${current_price:,.1f}</code>\n"
         f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
         f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
         f"<b>T</b>: <code>{total_sign}₹{total_inr:,.0f}</code>\n"
