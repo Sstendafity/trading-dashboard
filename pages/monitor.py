@@ -549,20 +549,19 @@ def telegram_command_listener(orders, cp):
 
                 msg = (
                     f"{now}\n"
-                    f"<b>₿ BTC Price</b>: <code>${cp:,.1f}</code>\n"
-                    f"<b>Net Running P&L</b>: "
-                    f"<code>{total_sign}₹{total_inr:,.0f}</code>\n"
-                    f"Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
-                    f"Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
-                    f"Total Orders: {len(orders)}\n"
-                    f"Buy Qty: {btc_to_lots(buy_qty)} lots\n"
-                    f"Sell Qty: {btc_to_lots(sell_qty)} lots\n"
+                    f"<b>CP</b>: <code>${cp:,.1f}</code>\n"
+                    f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
+                    f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
+                    f"<b>T</b>: <code>{total_sign}₹{total_inr:,.0f}</code>\n"
+                    f"BQ: {btc_to_lots(buy_qty)} lots\n"
+                    f"SQ: {btc_to_lots(sell_qty)} lots\n"
                     f"\n"
                 )
                 msg += "\n".join(lines)
                 msg += (
                     f"\n"
                     f"\n"
+                    f"Total Orders: {len(orders)}\n"
                     f"Idle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
                 )
 
@@ -849,20 +848,19 @@ def live_dashboard(orders):
 
             msg = (
                 f"{now}\n"
-                f"<b>₿ BTC Price</b>: <code>${cp:,.1f}</code>\n"
-                f"<b>Net Running P&L</b>: "
-                f"<code>{total_sign}₹{total_inr:,.0f}</code>\n"
-                f"Profit: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
-                f"Loss: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
-                f"Total Orders: {len(orders)}\n"
-                f"Buy Qty: {btc_to_lots(buy_qty)} lots\n"
-                f"Sell Qty: {btc_to_lots(sell_qty)} lots\n"
+                f"<b>CP</b>: <code>${cp:,.1f}</code>\n"
+                f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
+                f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
+                f"<b>T</b>: <code>{total_sign}₹{total_inr:,.0f}</code>\n"
+                f"BQ: {btc_to_lots(buy_qty)} lots\n"
+                f"SQ: {btc_to_lots(sell_qty)} lots\n"
                 f"\n"
             )
             msg += "\n".join(lines)
             msg += (
                 f"\n"
                 f"\n"
+                f"Total Orders: {len(orders)}\n"
                 f"Idle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
             )
 
