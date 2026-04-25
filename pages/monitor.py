@@ -571,180 +571,180 @@ def telegram_command_listener(orders, cp):
                 timeout=10
             )
 
-        # ==========================================
-        # /setuppricealert
-        # ==========================================
-        elif text.startswith("/setuppricealert"):
-            # Fetch fresh price if cp is 0
-            if cp <= 0:
-                fresh = _do_fetch()
-                cp = fresh["price"] if fresh else 0
+        # # ==========================================
+        # # /setuppricealert
+        # # ==========================================
+        # elif text.startswith("/setuppricealert"):
+        #     # Fetch fresh price if cp is 0
+        #     if cp <= 0:
+        #         fresh = _do_fetch()
+        #         cp = fresh["price"] if fresh else 0
 
-            st.session_state["awaiting_interval_chat"] = chat_id
-            st.session_state["price_alert_current_cp"] = cp
-            requests.post(
-                f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
-                json={"chat_id": chat_id, "text":
-                    f"🔔 <b>Price Interval Alert Setup</b>\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"Please send the price interval you want to be alerted at.\n\n"
-                    f"<b>Example:</b> Send <code>500</code> to get alerted every $500 move.\n\n"
-                    f"Current BTC price: <code>${cp:,.0f}</code>\n"
-                    f"With interval $500:\n"
-                    f"→ ↑ Alerts at ${cp+500:,.0f} · ${cp+1000:,.0f} · ${cp+1500:,.0f}\n"
-                    f"→ ↓ Alerts at ${cp-500:,.0f} · ${cp-1000:,.0f} · ${cp-1500:,.0f}",
-                    "parse_mode": "HTML"},
-                timeout=10
-            )
+        #     st.session_state["awaiting_interval_chat"] = chat_id
+        #     st.session_state["price_alert_current_cp"] = cp
+        #     requests.post(
+        #         f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+        #         json={"chat_id": chat_id, "text":
+        #             f"🔔 <b>Price Interval Alert Setup</b>\n"
+        #             f"━━━━━━━━━━━━━━━━━━\n"
+        #             f"Please send the price interval you want to be alerted at.\n\n"
+        #             f"<b>Example:</b> Send <code>500</code> to get alerted every $500 move.\n\n"
+        #             f"Current BTC price: <code>${cp:,.0f}</code>\n"
+        #             f"With interval $500:\n"
+        #             f"→ ↑ Alerts at ${cp+500:,.0f} · ${cp+1000:,.0f} · ${cp+1500:,.0f}\n"
+        #             f"→ ↓ Alerts at ${cp-500:,.0f} · ${cp-1000:,.0f} · ${cp-1500:,.0f}",
+        #             "parse_mode": "HTML"},
+        #         timeout=10
+        #     )
 
-        # ==========================================
-        # /stoppricealert
-        # ==========================================
-        elif text.startswith("/stoppricealert"):
-            if st.session_state.get("price_alert_active"):
-                interval = st.session_state.get("price_alert_interval", 0)
-                st.session_state["price_alert_active"] = False
-                st.session_state.pop("awaiting_interval_chat", None)
-                requests.post(
-                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
-                    json={"chat_id": chat_id, "text":
-                        f"🛑 <b>Price Alert Stopped</b>\n"
-                        f"━━━━━━━━━━━━━━━━━━\n"
-                        f"Interval <code>${interval:,.0f}</code> alert has been deactivated.\n"
-                        f"Use /setuppricealert to start a new one.",
-                        "parse_mode": "HTML"},
-                    timeout=10
-                )
-            else:
-                requests.post(
-                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
-                    json={"chat_id": chat_id,
-                          "text": "⚪ No active price interval alert to stop."},
-                    timeout=10
-                )
+        # # ==========================================
+        # # /stoppricealert
+        # # ==========================================
+        # elif text.startswith("/stoppricealert"):
+        #     if st.session_state.get("price_alert_active"):
+        #         interval = st.session_state.get("price_alert_interval", 0)
+        #         st.session_state["price_alert_active"] = False
+        #         st.session_state.pop("awaiting_interval_chat", None)
+        #         requests.post(
+        #             f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+        #             json={"chat_id": chat_id, "text":
+        #                 f"🛑 <b>Price Alert Stopped</b>\n"
+        #                 f"━━━━━━━━━━━━━━━━━━\n"
+        #                 f"Interval <code>${interval:,.0f}</code> alert has been deactivated.\n"
+        #                 f"Use /setuppricealert to start a new one.",
+        #                 "parse_mode": "HTML"},
+        #             timeout=10
+        #         )
+        #     else:
+        #         requests.post(
+        #             f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+        #             json={"chat_id": chat_id,
+        #                   "text": "⚪ No active price interval alert to stop."},
+        #             timeout=10
+        #         )
 
-        # ==========================================
-        # Interval number input
-        # (sent after /setuppricealert)
-        # ==========================================
-        elif st.session_state.get("awaiting_interval_chat") == chat_id:
-            try:
-                interval = float(raw_text.replace(",", "").strip())
-                if interval <= 0:
-                    raise ValueError("Interval must be positive")
+        # # ==========================================
+        # # Interval number input
+        # # (sent after /setuppricealert)
+        # # ==========================================
+        # elif st.session_state.get("awaiting_interval_chat") == chat_id:
+        #     try:
+        #         interval = float(raw_text.replace(",", "").strip())
+        #         if interval <= 0:
+        #             raise ValueError("Interval must be positive")
 
-                # Use stored price from setup time, or fetch fresh if still 0
-                base = st.session_state.get("price_alert_current_cp", cp)
-                if base <= 0:
-                    fresh = _do_fetch()
-                    base = fresh["price"] if fresh else 0
+        #         # Use stored price from setup time, or fetch fresh if still 0
+        #         base = st.session_state.get("price_alert_current_cp", cp)
+        #         if base <= 0:
+        #             fresh = _do_fetch()
+        #             base = fresh["price"] if fresh else 0
 
-                if base <= 0:
-                    requests.post(
-                        f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
-                        json={"chat_id": chat_id,
-                            "text": "❌ Could not fetch current BTC price. Please try again."},
-                        timeout=10
-                    )
-                    return
+        #         if base <= 0:
+        #             requests.post(
+        #                 f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+        #                 json={"chat_id": chat_id,
+        #                     "text": "❌ Could not fetch current BTC price. Please try again."},
+        #                 timeout=10
+        #             )
+        #             return
 
-                last_level = round(base / interval) * interval
+        #         last_level = round(base / interval) * interval
 
-                st.session_state["price_alert_active"] = True
-                st.session_state["price_alert_interval"] = interval
-                st.session_state["price_alert_base"] = base
-                st.session_state["price_alert_last_level"] = last_level
-                st.session_state["price_alert_setup_chat"] = chat_id
-                st.session_state.pop("awaiting_interval_chat", None)
+        #         st.session_state["price_alert_active"] = True
+        #         st.session_state["price_alert_interval"] = interval
+        #         st.session_state["price_alert_base"] = base
+        #         st.session_state["price_alert_last_level"] = last_level
+        #         st.session_state["price_alert_setup_chat"] = chat_id
+        #         st.session_state.pop("awaiting_interval_chat", None)
 
-                requests.post(
-                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
-                    json={"chat_id": chat_id, "text":
-                        f"✅ <b>Price Alert Activated!</b>\n"
-                        f"━━━━━━━━━━━━━━━━━━\n"
-                        f"📏 Interval: <code>${interval:,.0f}</code>\n"
-                        f"📍 Base Price: <code>${base:,.1f}</code>\n"
-                        f"🎯 First alerts at:\n"
-                        f"   ↑ <code>${base + interval:,.1f}</code>\n"
-                        f"   ↓ <code>${base - interval:,.1f}</code>\n"
-                        f"━━━━━━━━━━━━━━━━━━\n"
-                        f"Use /stoppricealert to stop.",
-                        "parse_mode": "HTML"},
-                    timeout=10
-                )
+        #         requests.post(
+        #             f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+        #             json={"chat_id": chat_id, "text":
+        #                 f"✅ <b>Price Alert Activated!</b>\n"
+        #                 f"━━━━━━━━━━━━━━━━━━\n"
+        #                 f"📏 Interval: <code>${interval:,.0f}</code>\n"
+        #                 f"📍 Base Price: <code>${base:,.1f}</code>\n"
+        #                 f"🎯 First alerts at:\n"
+        #                 f"   ↑ <code>${base + interval:,.1f}</code>\n"
+        #                 f"   ↓ <code>${base - interval:,.1f}</code>\n"
+        #                 f"━━━━━━━━━━━━━━━━━━\n"
+        #                 f"Use /stoppricealert to stop.",
+        #                 "parse_mode": "HTML"},
+        #             timeout=10
+        #         )
 
-            except ValueError:
-                requests.post(
-                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
-                    json={"chat_id": chat_id,
-                          "text": "❌ Invalid interval. Please send a number, e.g. <code>500</code>",
-                          "parse_mode": "HTML"},
-                    timeout=10
-                )
+        #     except ValueError:
+        #         requests.post(
+        #             f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+        #             json={"chat_id": chat_id,
+        #                   "text": "❌ Invalid interval. Please send a number, e.g. <code>500</code>",
+        #                   "parse_mode": "HTML"},
+        #             timeout=10
+        #         )
 
     st.session_state["tg_last_update_id"] = new_last_id
 
-    # ==========================================
-    # PRICE INTERVAL ALERT CHECK
-    # Runs every 5s regardless of Telegram messages
-    # Always fetches fresh price — never uses stale cp
-    # ==========================================
-    if not st.session_state.get("price_alert_active"):
-        return
+    # # ==========================================
+    # # PRICE INTERVAL ALERT CHECK
+    # # Runs every 5s regardless of Telegram messages
+    # # Always fetches fresh price — never uses stale cp
+    # # ==========================================
+    # if not st.session_state.get("price_alert_active"):
+    #     return
 
-    interval = st.session_state.get("price_alert_interval", 0)
-    last_level = st.session_state.get("price_alert_last_level", 0)
+    # interval = st.session_state.get("price_alert_interval", 0)
+    # last_level = st.session_state.get("price_alert_last_level", 0)
 
-    if interval <= 0:
-        return
+    # if interval <= 0:
+    #     return
 
-    # Always fetch fresh price for accurate level detection
-    try:
-        fresh = _do_fetch()
-        live_cp = fresh["price"] if fresh and fresh.get("price", 0) > 0 else 0
-    except Exception:
-        return
+    # # Always fetch fresh price for accurate level detection
+    # try:
+    #     fresh = _do_fetch()
+    #     live_cp = fresh["price"] if fresh and fresh.get("price", 0) > 0 else 0
+    # except Exception:
+    #     return
 
-    if live_cp <= 0:
-        return
+    # if live_cp <= 0:
+    #     return
 
-    current_level = round(live_cp / interval) * interval
+    # current_level = round(live_cp / interval) * interval
 
-    if last_level == 0:
-        # First run after setup — initialize silently, no alert
-        st.session_state["price_alert_last_level"] = current_level
-        return
+    # if last_level == 0:
+    #     # First run after setup — initialize silently, no alert
+    #     st.session_state["price_alert_last_level"] = current_level
+    #     return
 
-    if current_level != last_level:
-        direction = "📈" if current_level > last_level else "📉"
-        levels_crossed = abs(int(round((current_level - last_level) / interval)))
+    # if current_level != last_level:
+    #     direction = "📈" if current_level > last_level else "📉"
+    #     levels_crossed = abs(int(round((current_level - last_level) / interval)))
 
-        alert_msg = (
-            f"🔔 <b>PRICE INTERVAL ALERT</b>\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"{direction} BTC crossed a new level!\n"
-            f"📊 Current Price: <code>${live_cp:,.1f}</code>\n"
-            f"🎯 Level Reached: <code>${current_level:,.1f}</code>\n"
-            f"📏 Interval: <code>${interval:,.0f}</code>\n"
-        )
-        if levels_crossed > 1:
-            alert_msg += f"⚡ Skipped <b>{levels_crossed - 1}</b> level(s)\n"
-        alert_msg += (
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"Next: ↑ <code>${current_level + interval:,.1f}</code> | "
-            f"↓ <code>${current_level - interval:,.1f}</code>"
-        )
+    #     alert_msg = (
+    #         f"🔔 <b>PRICE INTERVAL ALERT</b>\n"
+    #         f"━━━━━━━━━━━━━━━━━━\n"
+    #         f"{direction} BTC crossed a new level!\n"
+    #         f"📊 Current Price: <code>${live_cp:,.1f}</code>\n"
+    #         f"🎯 Level Reached: <code>${current_level:,.1f}</code>\n"
+    #         f"📏 Interval: <code>${interval:,.0f}</code>\n"
+    #     )
+    #     if levels_crossed > 1:
+    #         alert_msg += f"⚡ Skipped <b>{levels_crossed - 1}</b> level(s)\n"
+    #     alert_msg += (
+    #         f"━━━━━━━━━━━━━━━━━━\n"
+    #         f"Next: ↑ <code>${current_level + interval:,.1f}</code> | "
+    #         f"↓ <code>${current_level - interval:,.1f}</code>"
+    #     )
 
-        # Send only to the chat that set up the alert
-        alert_chat = st.session_state.get("price_alert_setup_chat", "")
-        if alert_chat:
-            requests.post(
-                f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
-                json={"chat_id": alert_chat, "text": alert_msg, "parse_mode": "HTML"},
-                timeout=10
-            )
+    #     # Send only to the chat that set up the alert
+    #     alert_chat = st.session_state.get("price_alert_setup_chat", "")
+    #     if alert_chat:
+    #         requests.post(
+    #             f"https://api.telegram.org/bot{TELEGRAM_TOKEN_UI}/sendMessage",
+    #             json={"chat_id": alert_chat, "text": alert_msg, "parse_mode": "HTML"},
+    #             timeout=10
+    #         )
 
-        st.session_state["price_alert_last_level"] = current_level
+    #     st.session_state["price_alert_last_level"] = current_level
 
 @st.fragment(run_every=30)
 def live_dashboard(orders):
@@ -964,15 +964,15 @@ st.title("⚡ Live Order Monitor")
 
 orders = load_orders()
 
-# Price interval alert state
-if "price_alert_active" not in st.session_state:
-    st.session_state["price_alert_active"] = False
-if "price_alert_interval" not in st.session_state:
-    st.session_state["price_alert_interval"] = 0
-if "price_alert_base" not in st.session_state:
-    st.session_state["price_alert_base"] = 0
-if "price_alert_last_level" not in st.session_state:
-    st.session_state["price_alert_last_level"] = 0
+# # Price interval alert state
+# if "price_alert_active" not in st.session_state:
+#     st.session_state["price_alert_active"] = False
+# if "price_alert_interval" not in st.session_state:
+#     st.session_state["price_alert_interval"] = 0
+# if "price_alert_base" not in st.session_state:
+#     st.session_state["price_alert_base"] = 0
+# if "price_alert_last_level" not in st.session_state:
+#     st.session_state["price_alert_last_level"] = 0
 
 telegram_command_listener(orders, st.session_state.get("current_cp", 0))
 live_dashboard(orders)
