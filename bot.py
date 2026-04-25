@@ -38,6 +38,8 @@ USD_TO_INR = 85.0
 LOT_SIZE = 0.001
 POLL_INTERVAL = 3
 PRICE_CHECK_INTERVAL = 10
+cached_open_price = None
+cached_open_date = None
 
 ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 16)]
 
@@ -113,11 +115,21 @@ def fetch_btc_price():
 
 def fetch_btc_ticker():
     """
-    Fetch current price and today's true daily open price.
-    Only uses CCXT for open_price — avoids rolling 24h approximations
-    from CoinGecko/Bybit which give inconsistent open values.
-    Returns (current_price, open_price) where open_price may be None.
+    Fetch current price and today's open price.
+    Open price is cached once per UTC day to ensure consistency.
     """
+    global cached_open_price, cached_open_date
+
+    today = datetime.datetime.utcnow().date()
+
+    # Fetch current price
+    current_price = fetch_btc_price()
+
+    # Return cached open if same day
+    if cached_open_price is not None and cached_open_date == today:
+        return current_price, cached_open_price
+
+    # New day or first run — fetch and cache open price
     exchanges_to_try = ['okx', 'kucoin', 'gateio', 'htx']
     if CCXT_AVAILABLE:
         for exchange_id in exchanges_to_try:
@@ -127,29 +139,16 @@ def fetch_btc_ticker():
                     'enableRateLimit': False,
                 })
                 ticker = exchange.fetch_ticker('BTC/USDT')
-                price = float(ticker['last'])
-                open_price = float(ticker['open']) if ticker.get('open') else None
-                print(f"Ticker fetched via CCXT ({exchange_id}): price=${price:,.2f} open=${open_price:,.2f}" if open_price else f"Ticker fetched via CCXT ({exchange_id}): price=${price:,.2f} open=None")
-                return price, open_price
-            except Exception as e:
-                print(f"CCXT ticker {exchange_id} failed: {e}")
+                if ticker.get('open'):
+                    cached_open_price = float(ticker['open'])
+                    cached_open_date = today
+                    print(f"Open price cached: ${cached_open_price:,.2f} ({today})")
+                    return current_price, cached_open_price
+            except Exception:
                 continue
 
-    # CCXT unavailable or all failed — get price only, no open
-    # Do NOT use CoinGecko/Bybit for open — their 24h rolling window
-    # gives different values each minute, not a stable daily open
-    try:
-        price = fetch_with_coingecko()
-        return price, None
-    except Exception:
-        pass
-    try:
-        price = fetch_with_bybit()
-        return price, None
-    except Exception:
-        pass
-
-    raise Exception("All price sources failed")
+    # Could not get open — return None
+    return current_price, None
 
 # ==========================================
 # STORAGE
