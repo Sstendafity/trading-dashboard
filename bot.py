@@ -111,6 +111,58 @@ def fetch_btc_price():
         print(f"Bybit failed: {e}")
     raise Exception("All price sources failed")
 
+def fetch_btc_ticker():
+    """
+    Fetch both current price and today's opening price.
+    Returns (current_price, open_price).
+    open_price may be None if unavailable.
+    """
+    exchanges_to_try = ['okx', 'kucoin', 'gateio', 'htx']
+    if CCXT_AVAILABLE:
+        for exchange_id in exchanges_to_try:
+            try:
+                exchange = getattr(ccxt, exchange_id)({
+                    'timeout': 10000,
+                    'enableRateLimit': False,
+                })
+                ticker = exchange.fetch_ticker('BTC/USDT')
+                price = float(ticker['last'])
+                open_price = float(ticker['open']) if ticker.get('open') else None
+                return price, open_price
+            except Exception:
+                continue
+
+    # CoinGecko fallback — has open via price_change
+    try:
+        r = requests.get(
+            "https://api.coingecko.com/api/v3/coins/markets"
+            "?vs_currency=usd&ids=bitcoin",
+            timeout=10
+        )
+        data = r.json()[0]
+        price = float(data["current_price"])
+        change = float(data.get("price_change_24h") or 0)
+        open_price = price - change  # approximate open
+        return price, open_price
+    except Exception:
+        pass
+
+    # Bybit fallback
+    try:
+        r = requests.get(
+            "https://api.bybit.com/v5/market/tickers"
+            "?category=linear&symbol=BTCUSDT",
+            timeout=10
+        )
+        data = r.json()["result"]["list"][0]
+        price = float(data["lastPrice"])
+        open_price = float(data.get("prevPrice24h") or data.get("openPrice24h") or 0) or None
+        return price, open_price
+    except Exception:
+        pass
+
+    raise Exception("All price sources failed")
+
 # ==========================================
 # STORAGE
 # ==========================================
@@ -267,7 +319,12 @@ def get_current_level(price, base_price, interval):
     steps = round((price - base_price) / interval)
     return base_price + steps * interval
 
-def check_price_alerts(current_price):
+def check_price_alerts(current_price, open_price):
+    """
+    Check all active price interval alerts.
+    Alert message shows today's open price and diff from open — UI only.
+    The alert trigger logic is unchanged.
+    """
     for chat_id, config in list(price_alert_configs.items()):
         if not config.get("active"):
             continue
@@ -282,10 +339,23 @@ def check_price_alerts(current_price):
             direction = "📈" if current_level > last_level else "📉"
             levels_crossed = abs(int((current_level - last_level) / interval))
             rounded_price = round(current_price / 100) * 100
-            msg = (
-                f"{direction} <b>BTC ${rounded_price:,.0f}</b>\n"
-                f"Level: <code>${current_level:,.0f}</code> | Interval: <code>${interval:,.0f}</code>"
-            )
+
+            # Build message with open price and diff — UI only, logic unchanged
+            if open_price:
+                diff = current_price - open_price
+                diff_sign = "+" if diff >= 0 else ""
+                #diff_emoji = "📈" if diff >= 0 else "📉"
+                open_line = (
+                    f"Open: <code>${open_price:,.1f}</code> | "
+                    f"Diff: <code>{diff_sign}${diff:,.1f}</code>"
+                )
+            else:
+                open_line = None
+
+            msg = f"{direction} <b>BTC ${rounded_price:,.0f}</b>\n"
+            if open_line:
+                msg += f"{open_line}\n"
+            msg += f"Interval: <code>${interval:,.0f}</code>"
             if levels_crossed > 1:
                 msg += f"\n⚡ Skipped {levels_crossed - 1} level(s)"
 
@@ -325,7 +395,7 @@ def handle_interval_input(chat_id, text, current_price):
             "last_level": get_current_level(current_price, current_price, interval),
         }
         awaiting_interval.pop(chat_id, None)
-        save_alert_configs()  # persist immediately
+        save_alert_configs()
 
         send_telegram(
             f"✅ <b>Price Alert Activated!</b>\n"
@@ -353,7 +423,7 @@ def handle_stop_price_alert(chat_id):
         config = price_alert_configs[chat_id]
         price_alert_configs[chat_id]["active"] = False
         awaiting_interval.pop(chat_id, None)
-        save_alert_configs()  # persist immediately
+        save_alert_configs()
 
         send_telegram(
             f"🛑 <b>Price Alert Stopped</b>\n"
@@ -450,8 +520,8 @@ def main():
                 now = time.time()
                 if now - last_price_check >= PRICE_CHECK_INTERVAL:
                     try:
-                        current_price = fetch_btc_price()
-                        check_price_alerts(current_price)
+                        current_price, open_price = fetch_btc_ticker()
+                        check_price_alerts(current_price, open_price)
                         last_price_check = now
                     except Exception as e:
                         print(f"Price check error: {e}")
