@@ -352,7 +352,7 @@ def check_price_alerts(current_price, open_price):
             else:
                 open_line = None
 
-            msg = f"{direction} <b>BTC ${rounded_price:,.0f}</b>\n"
+            msg = f"<b>BTC ${rounded_price:,.0f}</b>\n"
             if open_line:
                 msg += f"{open_line}\n"
             msg += f"Interval: <code>${interval:,.0f}</code>"
