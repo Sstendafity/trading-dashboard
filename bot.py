@@ -129,32 +129,29 @@ def fetch_btc_ticker():
     if cached_open_price is not None and cached_open_date == today:
         return current_price, cached_open_price
 
-    # Fetch today's daily candle to get exact UTC midnight open
-    exchanges_to_try = ['okx', 'kucoin', 'gateio', 'htx']
+    # New day or first run — fetch today's daily candle open
     if CCXT_AVAILABLE:
+        exchanges_to_try = ['okx', 'kucoin', 'gateio', 'htx']
         for exchange_id in exchanges_to_try:
             try:
                 exchange = getattr(ccxt, exchange_id)({
                     'timeout': 10000,
                     'enableRateLimit': True,
                 })
-                # Fetch last 2 daily candles — index -1 is today's candle
                 ohlcv = exchange.fetch_ohlcv('BTC/USDT', timeframe='1d', limit=2)
                 if ohlcv and len(ohlcv) >= 1:
-                    # Last candle open = today's UTC midnight open
-                    today_open = float(ohlcv[-1][1])
-                    cached_open_price = today_open
+                    cached_open_price = float(ohlcv[-1][1])
                     cached_open_date = today
-                    print(f"Daily open cached from OHLCV ({exchange_id}): ${cached_open_price:,.2f} ({today})")
+                    print(f"Daily open cached ({exchange_id}): ${cached_open_price:,.2f} ({today})")
                     return current_price, cached_open_price
             except Exception as e:
                 print(f"OHLCV {exchange_id} failed: {e}")
                 continue
 
-    # CCXT unavailable — fall back to recording current price
+    # CCXT unavailable — fall back to current price
     cached_open_price = current_price
     cached_open_date = today
-    print(f"Open price fallback (current price): ${cached_open_price:,.2f} ({today})")
+    print(f"Open price fallback: ${cached_open_price:,.2f} ({today})")
     return current_price, cached_open_price
 
 # ==========================================
@@ -237,7 +234,7 @@ def get_updates(offset=None):
 # ==========================================
 
 def build_report(orders, current_price):
-    now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     total_usd = 0
     total_profit = 0
@@ -441,7 +438,7 @@ def main():
 
     print("=" * 40)
     print("BTC Bot started")
-    print(f"Time: {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    print(f"Time: {datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print(f"Polling every {POLL_INTERVAL}s for commands...")
     print("=" * 40)
 
