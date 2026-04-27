@@ -214,6 +214,14 @@ def _do_fetch():
         pass
     return None
 
+def fmt_volume(vol, price):
+    """Convert BTC volume to USD and format in K/M."""
+    vol_usd = vol * price
+    if vol_usd >= 1_000_000:
+        return f"{vol_usd / 1_000_000:,.2f}M"
+    else:
+        return f"{vol_usd / 1_000:,.1f}K"
+    
 # ==========================================
 # STORAGE
 # ==========================================
@@ -896,6 +904,7 @@ def live_dashboard(orders):
                 l = current['low']
                 c = current['close']
                 vol = current['volume']
+                vol_str = fmt_volume(vol, c)
                 change = c - o
                 change_pct = (change / o) * 100
                 change_sign = "+" if change >= 0 else ""
@@ -906,7 +915,7 @@ def live_dashboard(orders):
                     f"H <code>{h:,.1f}</code>  "
                     f"L <code>{l:,.1f}</code>  "
                     f"C <code>{c:,.1f}</code>\n"
-                    f"Vol <code>{vol:,.2f}</code>  ·  "
+                    f"Vol <code>{vol_str}</code>  ·  "
                     f"Change <code>{change_sign}{change:,.1f} ({change_sign}{change_pct:.2f}%)</code>\n"
                     f"<b>BTC/USDT · 1H · {candle_time}</b>"
                 )
@@ -917,7 +926,7 @@ def live_dashboard(orders):
                     f"BTC/USDT · 1H   "
                     f"O {o:,.1f}  H {h:,.1f}  L {l:,.1f}  C {c:,.1f}  "
                     f"Change {change_sign}{change:,.1f} ({change_sign}{change_pct:.2f}%)  "
-                    f"Vol {vol:,.2f}"
+                    f"Vol {vol_str}"
                 )
 
                 mc = mpf.make_marketcolors(
