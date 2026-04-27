@@ -11,6 +11,8 @@ import sys
 sys.path.insert(0, os.getcwd())
 from auth import check_password
 import math
+import mplfinance as mpf
+import io
 
 # if not check_password():
 #     st.stop()
@@ -879,11 +881,6 @@ def live_dashboard(orders):
             st.warning("Telegram not configured in secrets.")
         else:
             try:
-                import ccxt
-                import pandas as pd
-                import mplfinance as mpf
-                import io
-
                 # Fetch OHLCV
                 exchange = ccxt.okx({'timeout': 10000, 'enableRateLimit': True})
                 ohlcv = exchange.fetch_ohlcv('BTC/USDT', timeframe='1h', limit=48)
