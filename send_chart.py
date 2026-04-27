@@ -195,8 +195,8 @@ def main():
     df_full.set_index('timestamp', inplace=True)
 
     # Current (latest completed) candle — index -1
-    current = df_full.iloc[-1]
-    candle_time = df_full.index[-1].strftime('%Y-%m-%d %H:00 UTC')
+    current = df_full.iloc[-2]
+    candle_time = df_full.index[-2].strftime('%Y-%m-%d %H:00 UTC')
 
     o = current['open']
     h = current['high']
@@ -226,7 +226,7 @@ def main():
     # CHART — last 24 candles only
     # ==========================================
 
-    df_chart = df_full.tail(24).copy()
+    df_chart = df_full.iloc[:-1].tail(24).copy()
 
     chart_title = (
         f"BTC/USDT · 1H   "
