@@ -117,24 +117,44 @@ def fetch_btc_price():
 
 def fetch_btc_ticker():
     """
-    Fetch current price and today's open price.
-    Open = first price recorded after UTC midnight each day.
-    Does NOT use ticker['open'] — that's a rolling 24h value, not UTC midnight.
-    Cached once per day so every alert shows the same open price.
+    Fetch current price and today's true UTC midnight open price.
+    Uses OHLCV daily candle (1d timeframe) to get the exact 00:00 UTC open.
     """
     global cached_open_price, cached_open_date
 
-    today = datetime.datetime.utcnow().date()
+    today = datetime.datetime.now(datetime.timezone.utc).date()
     current_price = fetch_btc_price()
 
     # Same day and already cached — return as-is
     if cached_open_price is not None and cached_open_date == today:
         return current_price, cached_open_price
 
-    # New day or first run — record current price as today's open
+    # Fetch today's daily candle to get exact UTC midnight open
+    exchanges_to_try = ['okx', 'kucoin', 'gateio', 'htx']
+    if CCXT_AVAILABLE:
+        for exchange_id in exchanges_to_try:
+            try:
+                exchange = getattr(ccxt, exchange_id)({
+                    'timeout': 10000,
+                    'enableRateLimit': True,
+                })
+                # Fetch last 2 daily candles — index -1 is today's candle
+                ohlcv = exchange.fetch_ohlcv('BTC/USDT', timeframe='1d', limit=2)
+                if ohlcv and len(ohlcv) >= 1:
+                    # Last candle open = today's UTC midnight open
+                    today_open = float(ohlcv[-1][1])
+                    cached_open_price = today_open
+                    cached_open_date = today
+                    print(f"Daily open cached from OHLCV ({exchange_id}): ${cached_open_price:,.2f} ({today})")
+                    return current_price, cached_open_price
+            except Exception as e:
+                print(f"OHLCV {exchange_id} failed: {e}")
+                continue
+
+    # CCXT unavailable — fall back to recording current price
     cached_open_price = current_price
     cached_open_date = today
-    print(f"Open price set: ${cached_open_price:,.2f} ({today})")
+    print(f"Open price fallback (current price): ${cached_open_price:,.2f} ({today})")
     return current_price, cached_open_price
 
 # ==========================================
