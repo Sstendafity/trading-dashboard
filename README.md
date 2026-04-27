@@ -32,7 +32,6 @@ Runs 24/7 on Railway. Supports:
 | `/report` | Instant portfolio report with current P&L |
 | `/setuppricealert` | Set up price interval alerts (e.g. every $500) |
 | `/stoppricealert` | Stop price interval alerts |
-| `/openprice` | Check today's cached UTC midnight open price |
 
 ### 🔔 GitHub Actions Alerts (`alert_check.py`)
 Runs every 15 minutes via cron-job.org:
