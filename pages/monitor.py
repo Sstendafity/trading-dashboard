@@ -872,6 +872,107 @@ def live_dashboard(orders):
                 st.success("✅ Report sent to Telegram!")
             else:
                 st.error("❌ Failed to send to some chats.")
+    
+    # Send Chart Now button — add right after Send Report Now button
+    if st.button("📈 Send Chart Now", help="Send instant BTC chart to Telegram"):
+        if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS_UI:
+            st.warning("Telegram not configured in secrets.")
+        else:
+            try:
+                import ccxt
+                import pandas as pd
+                import mplfinance as mpf
+                import io
+
+                # Fetch OHLCV
+                exchange = ccxt.okx({'timeout': 10000, 'enableRateLimit': True})
+                ohlcv = exchange.fetch_ohlcv('BTC/USDT', timeframe='1h', limit=48)
+                df_full = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+                df_full['timestamp'] = pd.to_datetime(df_full['timestamp'], unit='ms')
+                df_full.set_index('timestamp', inplace=True)
+
+                # Current candle
+                current = df_full.iloc[-1]
+                candle_time = df_full.index[-1].strftime('%Y-%m-%d %H:00 UTC')
+                o = current['open']
+                h = current['high']
+                l = current['low']
+                c = current['close']
+                vol = current['volume']
+                change = c - o
+                change_pct = (change / o) * 100
+                change_sign = "+" if change >= 0 else ""
+
+                # Text message
+                text_msg = (
+                    f"O <code>{o:,.1f}</code>  "
+                    f"H <code>{h:,.1f}</code>  "
+                    f"L <code>{l:,.1f}</code>  "
+                    f"C <code>{c:,.1f}</code>\n"
+                    f"Vol <code>{vol:,.2f}</code>  ·  "
+                    f"Change <code>{change_sign}{change:,.1f} ({change_sign}{change_pct:.2f}%)</code>\n"
+                    f"<b>BTC/USDT · 1H · {candle_time}</b>"
+                )
+
+                # Chart
+                df_chart = df_full.tail(24).copy()
+                chart_title = (
+                    f"BTC/USDT · 1H   "
+                    f"O {o:,.1f}  H {h:,.1f}  L {l:,.1f}  C {c:,.1f}  "
+                    f"Change {change_sign}{change:,.1f} ({change_sign}{change_pct:.2f}%)  "
+                    f"Vol {vol:,.2f}"
+                )
+
+                mc = mpf.make_marketcolors(
+                    up='#00e676', down='#ff1744',
+                    edge='inherit', wick='inherit',
+                    volume={'up': '#00e676', 'down': '#ff1744'},
+                )
+                style = mpf.make_mpf_style(
+                    marketcolors=mc, base_mpf_style='nightclouds',
+                    gridstyle='--', gridcolor='#2a2a4a',
+                    facecolor='#0f0f23', figcolor='#0f0f23',
+                    y_on_right=True,
+                    rc={'axes.labelcolor': '#aaaaaa', 'xtick.color': '#aaaaaa', 'ytick.color': '#aaaaaa'}
+                )
+                fig, axes = mpf.plot(
+                    df_chart, type='candle', style=style,
+                    ylabel='', volume=True, ylabel_lower='',
+                    figsize=(14, 8), returnfig=True, tight_layout=True,
+                    datetime_format='%m-%d %H:%M', xrotation=30,
+                )
+                axes[0].set_title(chart_title, color='#cccccc', fontsize=10,
+                                fontfamily='monospace', loc='center', pad=10)
+
+                buf = io.BytesIO()
+                import matplotlib.pyplot as plt
+                plt.savefig(buf, format='png', dpi=150, bbox_inches='tight',
+                            facecolor='#0f0f23', edgecolor='none')
+                buf.seek(0)
+                plt.close(fig)
+                image_bytes = buf.getvalue()
+
+                # Send text then photo
+                tg_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+                tg_photo_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
+                all_ok = True
+                for cid in TELEGRAM_CHAT_IDS_UI:
+                    r1 = requests.post(tg_url, json={
+                        "chat_id": cid, "text": text_msg, "parse_mode": "HTML"
+                    }, timeout=10)
+                    r2 = requests.post(tg_photo_url, data={"chat_id": cid}, files={
+                        "photo": ("btc_chart.png", image_bytes, "image/png")
+                    }, timeout=30)
+                    if not r1.ok or not r2.ok:
+                        all_ok = False
+
+                if all_ok:
+                    st.success("✅ Chart sent to Telegram!")
+                else:
+                    st.error("❌ Failed to send to some chats.")
+
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
 
     st.caption(f"Source: {price_data.get('source', '—')} · {datetime.datetime.now().strftime('%H:%M:%S')}")
     st.markdown("---")

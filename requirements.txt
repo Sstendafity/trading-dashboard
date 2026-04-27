@@ -6,3 +6,5 @@ openpyxl
 streamlit-autorefresh
 requests
 ccxt
+mplfinance
+matplotlib
