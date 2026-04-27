@@ -144,10 +144,10 @@
   },
   {
     "account": "A-8",
-    "side": "Sell",
-    "entry_price": 77448.4,
+    "side": "Buy",
+    "entry_price": 76717.6,
     "qty": 0.01,
-    "liquidation": 80380.6,
+    "liquidation": null,
     "target": null,
     "stop_loss": null,
     "added_at": "2026-04-22 04:30:48.325005",
