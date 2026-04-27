@@ -38,6 +38,8 @@ USD_TO_INR = 85.0
 LOT_SIZE = 0.001
 POLL_INTERVAL = 3
 PRICE_CHECK_INTERVAL = 10
+
+# Open price cache — recorded once per UTC day
 cached_open_price = None
 cached_open_date = None
 
@@ -116,39 +118,24 @@ def fetch_btc_price():
 def fetch_btc_ticker():
     """
     Fetch current price and today's open price.
-    Open price is cached once per UTC day to ensure consistency.
+    Open = first price recorded after UTC midnight each day.
+    Does NOT use ticker['open'] — that's a rolling 24h value, not UTC midnight.
+    Cached once per day so every alert shows the same open price.
     """
     global cached_open_price, cached_open_date
 
     today = datetime.datetime.utcnow().date()
-
-    # Fetch current price
     current_price = fetch_btc_price()
 
-    # Return cached open if same day
+    # Same day and already cached — return as-is
     if cached_open_price is not None and cached_open_date == today:
         return current_price, cached_open_price
 
-    # New day or first run — fetch and cache open price
-    exchanges_to_try = ['okx', 'kucoin', 'gateio', 'htx']
-    if CCXT_AVAILABLE:
-        for exchange_id in exchanges_to_try:
-            try:
-                exchange = getattr(ccxt, exchange_id)({
-                    'timeout': 10000,
-                    'enableRateLimit': False,
-                })
-                ticker = exchange.fetch_ticker('BTC/USDT')
-                if ticker.get('open'):
-                    cached_open_price = float(ticker['open'])
-                    cached_open_date = today
-                    print(f"Open price cached: ${cached_open_price:,.2f} ({today})")
-                    return current_price, cached_open_price
-            except Exception:
-                continue
-
-    # Could not get open — return None
-    return current_price, None
+    # New day or first run — record current price as today's open
+    cached_open_price = current_price
+    cached_open_date = today
+    print(f"Open price set: ${cached_open_price:,.2f} ({today})")
+    return current_price, cached_open_price
 
 # ==========================================
 # STORAGE
