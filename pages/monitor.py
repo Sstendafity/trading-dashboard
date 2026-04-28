@@ -963,12 +963,12 @@ def live_dashboard(orders):
                 tg_photo_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
                 all_ok = True
                 for cid in TELEGRAM_CHAT_IDS_UI:
-                    r1 = requests.post(tg_url, json={
-                        "chat_id": cid, "text": text_msg, "parse_mode": "HTML"
-                    }, timeout=10)
-                    r2 = requests.post(tg_photo_url, data={"chat_id": cid}, files={
+                    r1 = requests.post(tg_photo_url, data={"chat_id": cid}, files={
                         "photo": ("btc_chart.png", image_bytes, "image/png")
                     }, timeout=30)
+                    r2 = requests.post(tg_url, json={
+                        "chat_id": cid, "text": text_msg, "parse_mode": "HTML"
+                    }, timeout=10)
                     if not r1.ok or not r2.ok:
                         all_ok = False
 

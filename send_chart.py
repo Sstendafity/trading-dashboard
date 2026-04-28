@@ -245,8 +245,8 @@ def main():
     # ==========================================
 
     # Option A — separate text then photo (default)
-    send_text(text_msg)
     send_photo_only(image_bytes)
+    send_text(text_msg)
 
     # Option B — photo with caption (comment out A and uncomment below)
     # send_photo_with_caption(image_bytes, text_msg)
