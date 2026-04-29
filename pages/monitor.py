@@ -906,6 +906,7 @@ def live_dashboard(orders):
                 vol = current['volume']
                 vol_str = fmt_volume(vol, c)
                 change = c - o
+                change_hl = h - l
                 change_pct = (change / o) * 100
                 change_sign = "+" if change >= 0 else ""
 
@@ -916,7 +917,8 @@ def live_dashboard(orders):
                     f"L <code>{l:,.1f}</code>  "
                     f"C <code>{c:,.1f}</code>\n"
                     f"Vol <code>{vol_str}</code>  ·  "
-                    f"Change <code>{change_sign}{change:,.1f} ({change_sign}{change_pct:.2f}%)</code>\n"
+                    f"Change OC <code>{change_sign}{change:,.1f} ({change_sign}{change_pct:.2f}%)</code>\n"
+                    f"Change HL <code>{change_sign}{change_hl:,.1f}</code>\n"
                     f"<b>BTC/USDT · 1H · {candle_time}</b>"
                 )
 
