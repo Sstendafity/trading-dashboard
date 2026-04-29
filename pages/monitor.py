@@ -918,7 +918,7 @@ def live_dashboard(orders):
                     f"C <code>{c:,.1f}</code>\n"
                     f"Vol <code>{vol_str}</code>  ·  "
                     f"Change OC <code>{change_sign}{change:,.1f} ({change_sign}{change_pct:.2f}%)</code>\n"
-                    f"Change HL <code>{change_sign}{change_hl:,.1f}</code>\n"
+                    f"Change HL <code>{change_hl:,.1f}</code>\n"
                     f"<b>BTC/USDT · 1H · {candle_time}</b>"
                 )
 
