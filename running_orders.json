@@ -141,5 +141,16 @@
     "stop_loss": null,
     "added_at": "2026-04-27 06:19:02.106934",
     "alert_threshold": 3.0
+  },
+  {
+    "account": "A-13",
+    "side": "Sell",
+    "entry_price": 78609.2,
+    "qty": 0.003,
+    "liquidation": null,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-05-01 15:57:50.099142",
+    "alert_threshold": 3.0
   }
 ]
