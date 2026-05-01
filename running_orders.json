@@ -33,17 +33,6 @@
     "alert_threshold": 3.0
   },
   {
-    "account": "A-10",
-    "side": "Sell",
-    "entry_price": 77550.0,
-    "qty": 0.01,
-    "liquidation": 81026.7,
-    "target": null,
-    "stop_loss": null,
-    "added_at": "2026-04-12 02:37:10.812609",
-    "alert_threshold": 3.0
-  },
-  {
     "account": "A-12",
     "side": "Sell",
     "entry_price": 70215.3,
