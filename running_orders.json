@@ -112,8 +112,8 @@
   {
     "account": "A-8",
     "side": "Buy",
-    "entry_price": 76696.8,
-    "qty": 0.013000000000000001,
+    "entry_price": 76909.7,
+    "qty": 0.015,
     "liquidation": null,
     "target": null,
     "stop_loss": null,
