@@ -134,8 +134,8 @@
   {
     "account": "A-13",
     "side": "Sell",
-    "entry_price": 78542.1,
-    "qty": 0.005,
+    "entry_price": 78413.7,
+    "qty": 0.007,
     "liquidation": null,
     "target": null,
     "stop_loss": null,
