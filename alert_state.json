@@ -33,6 +33,6 @@
   "A-13_Buy_75787.3_0.01_liq": true,
   "A-11_Buy_77668.9_0.01": false,
   "A-9_Sell_74986.5_0.01": true,
-  "A-3_Sell_76587.5_0.01": true,
-  "A-14_Sell_66405.4_0.002_liq": true
+  "A-3_Sell_76587.5_0.01": false,
+  "A-14_Sell_66405.4_0.002_liq": false
 }
