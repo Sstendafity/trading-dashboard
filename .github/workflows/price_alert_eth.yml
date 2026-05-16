@@ -1,4 +1,4 @@
-name: BTC Position Alert BTC
+name: BTC Position Alert ETH
 
 on:
   workflow_dispatch:
