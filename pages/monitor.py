@@ -957,7 +957,7 @@ def live_dashboard(orders):
     # ACTION BUTTONS — all in one row
     # ==========================================
 
-    btn1, btn2, btn3, btn4, _ = st.columns([2, 2, 2, 3])
+    btn1, btn2, btn3, btn4 = st.columns([2, 2, 2, 3])
     with btn1:
         send_report_btc = st.button("📊 Send Report BTC", help="Send instant BTC portfolio report to Telegram", use_container_width=True)
     with btn2:
