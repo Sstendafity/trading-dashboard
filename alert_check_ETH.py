@@ -1,12 +1,12 @@
 # ==========================================
-# FILE: alert_check_btc.py
+# FILE: alert_check_eth.py
 # ==========================================
 
 """
-alert_check_btc.py
+alert_check_eth.py
 Runs via cron every 15 minutes.
 
-BTC ONLY VERSION
+ETH ONLY VERSION
 """
 
 import json
@@ -25,7 +25,7 @@ except ImportError:
 # CONFIGURATION
 # ==========================================
 
-SYMBOL = "BTC"
+SYMBOL = "ETH"
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 
@@ -37,12 +37,12 @@ TELEGRAM_CHAT_IDS = [
 TELEGRAM_CHAT_IDS = [cid for cid in TELEGRAM_CHAT_IDS if cid]
 
 ORDERS_DB = "running_orders.json"
-ALERT_STATE_DB = "alert_state_btc.json"
+ALERT_STATE_DB = "alert_state_eth.json"
 
 DEFAULT_THRESHOLD_PCT = 3.0
 USD_TO_INR = 85.0
 
-LOT_SIZE = 0.001  # BTC lot size
+LOT_SIZE = 0.01  # ETH lot size
 
 REPORT_INTERVAL_MINUTES = 13
 
@@ -102,7 +102,7 @@ def fetch_with_ccxt():
 def fetch_with_coingecko():
     r = requests.get(
         "https://api.coingecko.com/api/v3/coins/markets"
-        "?vs_currency=usd&ids=bitcoin",
+        "?vs_currency=usd&ids=ethereum",
         timeout=10
     )
 
@@ -285,7 +285,7 @@ def build_report_msg(orders, current_price):
     total_sign = "+" if total_inr >= 0 else ""
 
     msg = (
-        f"BTC Report\n"
+        f"ETH Report\n"
         f"<b>CP</b>: <code>${current_price:,.1f}</code>\n"
         f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
         f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
@@ -314,7 +314,7 @@ def build_report_msg(orders, current_price):
 def main():
 
     print("=" * 40)
-    print("BTC Position Alert Check")
+    print("ETH Position Alert Check")
     print("=" * 40)
 
     current_price = fetch_price()
@@ -327,7 +327,7 @@ def main():
     ]
 
     if not orders:
-        print("No BTC positions found.")
+        print("No ETH positions found.")
         return
 
     alert_state = load_json(ALERT_STATE_DB, {})
@@ -363,7 +363,7 @@ def main():
 
         if send_telegram(msg):
 
-            print("BTC report sent")
+            print("ETH report sent")
 
             alert_state["last_report_time"] = now.isoformat()
 
