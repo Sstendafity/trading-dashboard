@@ -957,12 +957,14 @@ def live_dashboard(orders):
     # ACTION BUTTONS — all in one row
     # ==========================================
 
-    btn1, btn2, btn3, _ = st.columns([2, 2, 2, 3])
+    btn1, btn2, btn3, btn4, _ = st.columns([2, 2, 2, 4])
     with btn1:
-        send_report = st.button("📊 Send Report", help="Send instant portfolio report to Telegram", use_container_width=True)
+        send_report_btc = st.button("📊 Send Report BTC", help="Send instant BTC portfolio report to Telegram", use_container_width=True)
     with btn2:
-        send_btc = st.button("📈 BTC Chart", help="Send BTC candlestick chart", use_container_width=True)
+        send_report_eth = st.button("📊 Send Report ETH", help="Send instant ETH portfolio report to Telegram", use_container_width=True)
     with btn3:
+        send_btc = st.button("📈 BTC Chart", help="Send BTC candlestick chart", use_container_width=True)
+    with btn4:
         send_eth = st.button("📈 ETH Chart", help="Send ETH candlestick chart", use_container_width=True)
 
     st.caption(f"BTC: {price_data.get('source','—')} · ETH: {eth_data.get('source','—')} · {datetime.datetime.now().strftime('%H:%M:%S')}")
@@ -976,20 +978,26 @@ def live_dashboard(orders):
     ] if c]
 
     # Send Report button
-    if send_report:
+    if send_report_btc or send_report_eth:
         if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS_UI:
             st.warning("Telegram not configured in secrets.")
         elif not orders:
             st.info("No open positions to report.")
         else:
+            if send_report_btc:
+                fresh_btc = _do_fetch('BTC')
+                cp = fresh_btc["price"] if fresh_btc else cp
+            if send_report_eth:
+                fresh_eth = _do_fetch('ETH')
+                eth_cp = fresh_eth["price"] if fresh_eth else eth_cp
+
             total_usd = total_profit = total_loss = total_inr = 0
             profit_count = loss_count = 0
             buy_qty_btc = sell_qty_btc = buy_qty_eth = sell_qty_eth = 0
-            lines = []
+            lines_btc = []
+            lines_eth = []
             order_pnls = []
             ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 18)]
-            active_accounts = {o.get("account") for o in orders}
-            inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
 
             for o in orders:
                 sym = o.get("symbol", "BTC")
@@ -1015,23 +1023,49 @@ def live_dashboard(orders):
                 side_emoji = "🟢" if o.get("side") == "Buy" else "🔴"
                 pnl_sign = "+" if running_inr >= 0 else ""
                 lots = qty_to_lots(o.get("qty", 0), sym)
-                lines.append(
-                    f"  {side_emoji} <b>{o.get('account')}</b> [{sym}] "
-                    f"@ ${o.get('entry_price', 0):,.1f} | {lots} lots "
-                    f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
-                )
+                if sym == "BTC":
+                    active_accounts = {o.get("account") for o in orders}
+                    inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
+                    lines_btc.append(
+                        f"BTC Report\n"
+                        f"  {side_emoji} <b>{o.get('account')}</b> [{sym}] "
+                        f"@ ${o.get('entry_price', 0):,.1f} | {lots} lots "
+                        f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
+                    )
+                else:
+                    active_accounts = {o.get("account") for o in orders}
+                    inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
+                    lines_eth.append(
+                        f"ETH Report\n"
+                        f"  {side_emoji} <b>{o.get('account')}</b> [{sym}] "
+                        f"@ ${o.get('entry_price', 0):,.1f} | {lots} lots "
+                        f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
+                    )
 
             total_sign = "+" if total_inr >= 0 else ""
-            msg = (
-                f"₿ <code>${cp:,.1f}</code>  Ξ <code>${eth_cp:,.2f}</code>\n"
-                f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
-                f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
-                f"<b>T</b>: <code>{total_sign}₹{total_inr:,.0f}</code>\n"
-                f"BTC BQ: {btc_to_lots(buy_qty_btc)} | SQ: {btc_to_lots(sell_qty_btc)} lots\n"
+            if send_report_btc:
+                msg = (
+                    f"₿ <code>${cp:,.1f}</code>\n"
+                    f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
+                    f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
+                    f"<b>T</b>: <code>{total_sign}₹{total_inr:,.0f}</code>\n"
+                    f"BTC BQ: {btc_to_lots(buy_qty_btc)} | SQ: {btc_to_lots(sell_qty_btc)} lots\n\n"
+                )
+                msg += "\n".join(lines_btc)
+                msg += f"\n\nTotal Orders: {len(orders)}\nIdle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
+
+            if send_report_eth:
+                msg = (
+                    f"₿ <code>${cp:,.1f}</code>  Ξ <code>${eth_cp:,.2f}</code>\n"
+                    f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
+                    f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
+                    f"<b>T</b>: <code>{total_sign}₹{total_inr:,.0f}</code>\n"
+                    f"BTC BQ: {btc_to_lots(buy_qty_btc)} | SQ: {btc_to_lots(sell_qty_btc)} lots\n"
                 f"ETH BQ: {qty_to_lots(buy_qty_eth, 'ETH')} | SQ: {qty_to_lots(sell_qty_eth, 'ETH')} lots\n\n"
-            )
-            msg += "\n".join(lines)
-            msg += f"\n\nTotal Orders: {len(orders)}\nIdle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
+                )
+                msg += "\n".join(lines_eth)
+                msg += f"\n\nTotal Orders: {len(orders)}\nIdle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
+            
 
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
             all_ok = True
