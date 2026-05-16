@@ -188,5 +188,17 @@
     "stop_loss": null,
     "added_at": "2026-05-16 18:38:43.957908",
     "alert_threshold": 3.0
+  },
+  {
+    "account": "A-4",
+    "symbol": "ETH",
+    "side": "Sell",
+    "entry_price": 2271.3,
+    "qty": 0.18,
+    "liquidation": null,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-05-16 18:40:54.056786",
+    "alert_threshold": 3.0
   }
 ]
