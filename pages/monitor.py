@@ -976,7 +976,7 @@ def live_dashboard(orders):
     ] if c]
 
     # Send Report button
-    if st.button("📊 Send Report Now", help="Send instant portfolio report to Telegram"):
+    if send_report:
         if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS_UI:
             st.warning("Telegram not configured in secrets.")
         elif not orders:
