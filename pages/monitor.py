@@ -908,37 +908,65 @@ def live_dashboard(orders):
     cp = price_data["price"]
     eth_cp = eth_data["price"]
 
-    # --- BTC Price bar ---
-    col_btc, col_btc_chg, col_btc_h, col_btc_l, col_refresh = st.columns([3, 2, 2, 2, 1])
-    btc_color = "price-up" if price_data["change_pct"] >= 0 else "price-down"
-    btc_arrow = "▲" if price_data["change_pct"] >= 0 else "▼"
+    # ==========================================
+    # PRICE BAR — BTC and ETH side by side
+    # ==========================================
+
+    col_btc, col_eth, col_refresh = st.columns([5, 5, 1])
+
     with col_btc:
-        st.markdown(f'<div class="price-display {btc_color}">BTC ${cp:,.1f}</div>', unsafe_allow_html=True)
-    with col_btc_chg:
-        st.markdown(f'<div class="stat-label">24h Change</div><div class="stat-value" style="{color_val(price_data["change_pct"])}">{btc_arrow} {abs(price_data["change_pct"]):.2f}%</div>', unsafe_allow_html=True)
-    with col_btc_h:
-        st.markdown(f'<div class="stat-label">24h High</div><div class="stat-value">${price_data["high"]:,.1f}</div>', unsafe_allow_html=True)
-    with col_btc_l:
-        st.markdown(f'<div class="stat-label">24h Low</div><div class="stat-value">${price_data["low"]:,.1f}</div>', unsafe_allow_html=True)
+        btc_color = "price-up" if price_data["change_pct"] >= 0 else "price-down"
+        btc_arrow = "▲" if price_data["change_pct"] >= 0 else "▼"
+        chg_color = color_val(price_data["change_pct"])
+        st.markdown(
+            f'<div class="price-display {btc_color}">BTC ${cp:,.1f}</div>'
+            f'<div style="display:flex;gap:20px;margin-top:4px">'
+            f'<span><span class="stat-label">CHANGE </span><span style="{chg_color};font-weight:700">{btc_arrow} {abs(price_data["change_pct"]):.2f}%</span></span>'
+            f'<span><span class="stat-label">HIGH </span><span style="font-weight:700">${price_data["high"]:,.1f}</span></span>'
+            f'<span><span class="stat-label">LOW </span><span style="font-weight:700">${price_data["low"]:,.1f}</span></span>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+    with col_eth:
+        if eth_data.get("ok"):
+            eth_color = "price-up" if eth_data["change_pct"] >= 0 else "price-down"
+            eth_arrow = "▲" if eth_data["change_pct"] >= 0 else "▼"
+            eth_chg_color = color_val(eth_data["change_pct"])
+            st.markdown(
+                f'<div class="price-display {eth_color}" style="font-size:1.6rem">ETH ${eth_cp:,.2f}</div>'
+                f'<div style="display:flex;gap:20px;margin-top:4px">'
+                f'<span><span class="stat-label">CHANGE </span><span style="{eth_chg_color};font-weight:700">{eth_arrow} {abs(eth_data["change_pct"]):.2f}%</span></span>'
+                f'<span><span class="stat-label">HIGH </span><span style="font-weight:700">${eth_data["high"]:,.2f}</span></span>'
+                f'<span><span class="stat-label">LOW </span><span style="font-weight:700">${eth_data["low"]:,.2f}</span></span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
     with col_refresh:
+        st.markdown("<div style='margin-top:8px'>", unsafe_allow_html=True)
         if st.button("🔄", help="Force refresh prices"):
             st.session_state.pop("price_cache", None)
             st.session_state.pop("price_cache_eth", None)
             st.rerun(scope="fragment")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- ETH Price bar ---
-    if eth_data.get("ok"):
-        col_eth, col_eth_chg, col_eth_h, col_eth_l, _ = st.columns([3, 2, 2, 2, 1])
-        eth_color = "price-up" if eth_data["change_pct"] >= 0 else "price-down"
-        eth_arrow = "▲" if eth_data["change_pct"] >= 0 else "▼"
-        with col_eth:
-            st.markdown(f'<div class="price-display-eth {eth_color}">ETH ${eth_cp:,.2f}</div>', unsafe_allow_html=True)
-        with col_eth_chg:
-            st.markdown(f'<div class="stat-label">24h Change</div><div class="stat-value" style="{color_val(eth_data["change_pct"])}">{eth_arrow} {abs(eth_data["change_pct"]):.2f}%</div>', unsafe_allow_html=True)
-        with col_eth_h:
-            st.markdown(f'<div class="stat-label">24h High</div><div class="stat-value">${eth_data["high"]:,.2f}</div>', unsafe_allow_html=True)
-        with col_eth_l:
-            st.markdown(f'<div class="stat-label">24h Low</div><div class="stat-value">${eth_data["low"]:,.2f}</div>', unsafe_allow_html=True)
+    st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
+
+    # ==========================================
+    # ACTION BUTTONS — all in one row
+    # ==========================================
+
+    btn1, btn2, btn3, _ = st.columns([2, 2, 2, 3])
+    with btn1:
+        send_report = st.button("📊 Send Report", help="Send instant portfolio report to Telegram", use_container_width=True)
+    with btn2:
+        send_btc = st.button("📈 BTC Chart", help="Send BTC candlestick chart", use_container_width=True)
+    with btn3:
+        send_eth = st.button("📈 ETH Chart", help="Send ETH candlestick chart", use_container_width=True)
+
+    st.caption(f"BTC: {price_data.get('source','—')} · ETH: {eth_data.get('source','—')} · {datetime.datetime.now().strftime('%H:%M:%S')}")
+    st.markdown("---")
 
     # Telegram credentials
     TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
@@ -1016,19 +1044,17 @@ def live_dashboard(orders):
                 st.error("❌ Failed to send to some chats.")
 
     # Chart buttons
-    btn_c1, btn_c2 = st.columns(2)
-    with btn_c1:
-        if st.button("📈 BTC Chart Now", help="Send BTC candlestick chart to Telegram"):
-            if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS_UI:
-                st.warning("Telegram not configured.")
-            else:
-                send_chart_telegram("BTC", TELEGRAM_TOKEN, TELEGRAM_CHAT_IDS_UI)
-    with btn_c2:
-        if st.button("📈 ETH Chart Now", help="Send ETH candlestick chart to Telegram"):
-            if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS_UI:
-                st.warning("Telegram not configured.")
-            else:
-                send_chart_telegram("ETH", TELEGRAM_TOKEN, TELEGRAM_CHAT_IDS_UI)
+    if send_btc:
+        if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS_UI:
+            st.warning("Telegram not configured.")
+        else:
+            send_chart_telegram("BTC", TELEGRAM_TOKEN, TELEGRAM_CHAT_IDS_UI)
+
+    if send_eth:
+        if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS_UI:
+            st.warning("Telegram not configured.")
+        else:
+            send_chart_telegram("ETH", TELEGRAM_TOKEN, TELEGRAM_CHAT_IDS_UI)
 
     st.caption(f"BTC source: {price_data.get('source', '—')} · ETH source: {eth_data.get('source', '—')} · {datetime.datetime.now().strftime('%H:%M:%S')}")
     st.markdown("---")
