@@ -1027,8 +1027,7 @@ def live_dashboard(orders):
                     active_accounts = {o.get("account") for o in orders}
                     inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
                     lines_btc.append(
-                        f"BTC Report\n"
-                        f"  {side_emoji} <b>{o.get('account')}</b> [{sym}] "
+                        f"  {side_emoji} <b>{o.get('account')}</b> "
                         f"@ ${o.get('entry_price', 0):,.1f} | {lots} lots "
                         f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
                     )
@@ -1036,8 +1035,7 @@ def live_dashboard(orders):
                     active_accounts = {o.get("account") for o in orders}
                     inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
                     lines_eth.append(
-                        f"ETH Report\n"
-                        f"  {side_emoji} <b>{o.get('account')}</b> [{sym}] "
+                        f"  {side_emoji} <b>{o.get('account')}</b> "
                         f"@ ${o.get('entry_price', 0):,.1f} | {lots} lots "
                         f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
                     )
@@ -1045,6 +1043,7 @@ def live_dashboard(orders):
             total_sign = "+" if total_inr >= 0 else ""
             if send_report_btc:
                 msg = (
+                    f"BTC Report\n"
                     f"₿ <code>${cp:,.1f}</code>\n"
                     f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
                     f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
@@ -1056,6 +1055,7 @@ def live_dashboard(orders):
 
             if send_report_eth:
                 msg = (
+                    f"ETH Report\n"
                     f"₿ <code>${cp:,.1f}</code>  Ξ <code>${eth_cp:,.2f}</code>\n"
                     f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
                     f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
