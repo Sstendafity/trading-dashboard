@@ -1,4 +1,4 @@
-name: BTC Position Alert
+name: BTC Position Alert BTC
 
 on:
   workflow_dispatch:
