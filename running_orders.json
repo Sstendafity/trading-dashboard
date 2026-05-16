@@ -164,5 +164,65 @@
     "stop_loss": null,
     "added_at": "2026-05-16 13:25:48.832271",
     "alert_threshold": 3.0
+  },
+  {
+    "account": "A-2",
+    "symbol": "ETH",
+    "side": "Buy",
+    "entry_price": 2292.1,
+    "qty": 0.12,
+    "liquidation": null,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-05-16 18:36:34.993605",
+    "alert_threshold": 3.0
+  },
+  {
+    "account": "A-3",
+    "symbol": "ETH",
+    "side": "Buy",
+    "entry_price": 2267.55,
+    "qty": 0.08,
+    "liquidation": null,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-05-16 18:38:43.957908",
+    "alert_threshold": 3.0
+  },
+  {
+    "account": "A-4",
+    "symbol": "ETH",
+    "side": "Sell",
+    "entry_price": 2271.3,
+    "qty": 0.18,
+    "liquidation": null,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-05-16 18:40:54.056786",
+    "alert_threshold": 3.0
+  },
+  {
+    "account": "A-5",
+    "symbol": "ETH",
+    "side": "Buy",
+    "entry_price": 2211.5,
+    "qty": 0.05,
+    "liquidation": null,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-05-16 18:42:10.716260",
+    "alert_threshold": 3.0
+  },
+  {
+    "account": "A-6",
+    "symbol": "ETH",
+    "side": "Buy",
+    "entry_price": 2187.3,
+    "qty": 0.03,
+    "liquidation": null,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-05-16 18:43:00.758601",
+    "alert_threshold": 3.0
   }
 ]
