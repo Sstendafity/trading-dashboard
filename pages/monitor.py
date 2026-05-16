@@ -1056,9 +1056,6 @@ def live_dashboard(orders):
         else:
             send_chart_telegram("ETH", TELEGRAM_TOKEN, TELEGRAM_CHAT_IDS_UI)
 
-    st.caption(f"BTC source: {price_data.get('source', '—')} · ETH source: {eth_data.get('source', '—')} · {datetime.datetime.now().strftime('%H:%M:%S')}")
-    st.markdown("---")
-
     if not orders:
         st.info("👋 No open positions. Add one below.")
         return
@@ -1082,25 +1079,140 @@ def live_dashboard(orders):
             </div>
             """, unsafe_allow_html=True)
 
-    # Summary
-    total_running_inr = sum(c["running_inr"] for c in calcs)
-    profit_orders = [o for o, c in zip(orders, calcs) if c["running_inr"] > 0]
-    loss_orders = [o for o, c in zip(orders, calcs) if c["running_inr"] < 0]
-    buy_qty_btc = sum(o.get("qty", 0) or 0 for o in orders if o.get("side") == "Buy" and o.get("symbol", "BTC") == "BTC")
-    sell_qty_btc = sum(o.get("qty", 0) or 0 for o in orders if o.get("side") == "Sell" and o.get("symbol", "BTC") == "BTC")
-    buy_qty_eth = sum(o.get("qty", 0) or 0 for o in orders if o.get("side") == "Buy" and o.get("symbol") == "ETH")
-    sell_qty_eth = sum(o.get("qty", 0) or 0 for o in orders if o.get("side") == "Sell" and o.get("symbol") == "ETH")
+    # ==========================================
+    # SUMMARY
+    # ==========================================
+
+    # Calculate all values
+    total_inr = sum(c["running_inr"] for c in calcs)
+    total_usd = sum(c["running_usd"] for c in calcs)
+
+    btc_orders = [(o, c) for o, c in zip(orders, calcs) if o.get("symbol", "BTC") == "BTC"]
+    eth_orders = [(o, c) for o, c in zip(orders, calcs) if o.get("symbol") == "ETH"]
+
+    def calc_summary(pairs):
+        profit_count = sum(1 for _, c in pairs if c["running_inr"] > 0)
+        loss_count = sum(1 for _, c in pairs if c["running_inr"] < 0)
+        total_profit = sum(c["running_inr"] for _, c in pairs if c["running_inr"] > 0)
+        total_loss = sum(c["running_inr"] for _, c in pairs if c["running_inr"] < 0)
+        net_inr = sum(c["running_inr"] for _, c in pairs)
+        net_usd = sum(c["running_usd"] for _, c in pairs)
+        buy_qty = sum(o.get("qty", 0) or 0 for o, _ in pairs if o.get("side") == "Buy")
+        sell_qty = sum(o.get("qty", 0) or 0 for o, _ in pairs if o.get("side") == "Sell")
+        return profit_count, loss_count, total_profit, total_loss, net_inr, net_usd, buy_qty, sell_qty
+
+    btc_p, btc_l, btc_tp, btc_tl, btc_net_inr, btc_net_usd, btc_bq, btc_sq = calc_summary(btc_orders)
+    eth_p, eth_l, eth_tp, eth_tl, eth_net_inr, eth_net_usd, eth_bq, eth_sq = calc_summary(eth_orders)
+
+    net_color = "#00e676" if total_inr >= 0 else "#ff1744"
+    btc_net_color = "#00e676" if btc_net_inr >= 0 else "#ff1744"
+    eth_net_color = "#00e676" if eth_net_inr >= 0 else "#ff1744"
+    ts = "+" if total_inr >= 0 else ""
 
     st.markdown("### 📊 Summary")
-    s1, s2, s3, s4, s5, s6, s7 = st.columns(7)
-    net_color = "#00e676" if total_running_inr >= 0 else "#ff1744"
-    with s1: st.markdown(summary_box("Net P&L", fmt_inr(total_running_inr), net_color), unsafe_allow_html=True)
-    with s2: st.markdown(summary_box("Profit", len(profit_orders), "#00e676"), unsafe_allow_html=True)
-    with s3: st.markdown(summary_box("Loss", len(loss_orders), "#ff1744"), unsafe_allow_html=True)
-    with s4: st.markdown(summary_box("Total", len(orders)), unsafe_allow_html=True)
-    with s5: st.markdown(summary_box("BTC Buy/Sell", f"{btc_to_lots(buy_qty_btc)}L / {btc_to_lots(sell_qty_btc)}L"), unsafe_allow_html=True)
-    with s6: st.markdown(summary_box("ETH Buy/Sell", f"{qty_to_lots(buy_qty_eth,'ETH')}L / {qty_to_lots(sell_qty_eth,'ETH')}L"), unsafe_allow_html=True)
-    with s7: st.markdown(summary_box("Positions", f"BTC:{sum(1 for o in orders if o.get('symbol','BTC')=='BTC')} ETH:{sum(1 for o in orders if o.get('symbol')=='ETH')}"), unsafe_allow_html=True)
+
+    # Row 1 — Overall
+    st.markdown("##### Overall")
+    r1c1, r1c2, r1c3, r1c4, r1c5 = st.columns(5)
+    with r1c1:
+        st.markdown(summary_box(
+            "Net Running P&L",
+            f"{fmt_inr(total_inr)}<br><small style='font-size:11px;opacity:0.7'>{fmt_usd(total_usd)}</small>",
+            net_color
+        ), unsafe_allow_html=True)
+    with r1c2:
+        st.markdown(summary_box(
+            "Profit Positions",
+            f"{sum(1 for c in calcs if c['running_inr'] > 0)}<br><small style='font-size:11px;color:#00e676'>+₹{sum(c['running_inr'] for c in calcs if c['running_inr'] > 0):,.0f}</small>"
+        ), unsafe_allow_html=True)
+    with r1c3:
+        st.markdown(summary_box(
+            "Loss Positions",
+            f"{sum(1 for c in calcs if c['running_inr'] < 0)}<br><small style='font-size:11px;color:#ff1744'>₹{sum(c['running_inr'] for c in calcs if c['running_inr'] < 0):,.0f}</small>"
+        ), unsafe_allow_html=True)
+    with r1c4:
+        st.markdown(summary_box("Total Positions", len(orders)), unsafe_allow_html=True)
+    with r1c5:
+        btc_count = sum(1 for o in orders if o.get("symbol", "BTC") == "BTC")
+        eth_count = sum(1 for o in orders if o.get("symbol") == "ETH")
+        st.markdown(summary_box(
+            "By Symbol",
+            f"BTC: {btc_count}<br><small style='font-size:12px'>ETH: {eth_count}</small>"
+        ), unsafe_allow_html=True)
+
+    st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
+
+    # Row 2 — BTC
+    if btc_orders:
+        st.markdown("##### ₿ BTC")
+        b1, b2, b3, b4, b5, b6 = st.columns(6)
+        with b1:
+            st.markdown(summary_box(
+                "BTC Net P&L",
+                f"{fmt_inr(btc_net_inr)}<br><small style='font-size:11px;opacity:0.7'>{fmt_usd(btc_net_usd)}</small>",
+                btc_net_color
+            ), unsafe_allow_html=True)
+        with b2:
+            st.markdown(summary_box(
+                "BTC Profit",
+                f"{btc_p} pos<br><small style='font-size:11px;color:#00e676'>+₹{btc_tp:,.0f}</small>"
+            ), unsafe_allow_html=True)
+        with b3:
+            st.markdown(summary_box(
+                "BTC Loss",
+                f"{btc_l} pos<br><small style='font-size:11px;color:#ff1744'>₹{btc_tl:,.0f}</small>"
+            ), unsafe_allow_html=True)
+        with b4:
+            st.markdown(summary_box("BTC Positions", len(btc_orders)), unsafe_allow_html=True)
+        with b5:
+            st.markdown(summary_box(
+                "BTC Buy Lots",
+                f"{btc_to_lots(btc_bq)}L",
+                "#00e676"
+            ), unsafe_allow_html=True)
+        with b6:
+            st.markdown(summary_box(
+                "BTC Sell Lots",
+                f"{btc_to_lots(btc_sq)}L",
+                "#ff1744"
+            ), unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
+
+    # Row 3 — ETH
+    if eth_orders:
+        st.markdown("##### Ξ ETH")
+        e1, e2, e3, e4, e5, e6 = st.columns(6)
+        with e1:
+            st.markdown(summary_box(
+                "ETH Net P&L",
+                f"{fmt_inr(eth_net_inr)}<br><small style='font-size:11px;opacity:0.7'>{fmt_usd(eth_net_usd)}</small>",
+                eth_net_color
+            ), unsafe_allow_html=True)
+        with e2:
+            st.markdown(summary_box(
+                "ETH Profit",
+                f"{eth_p} pos<br><small style='font-size:11px;color:#00e676'>+₹{eth_tp:,.0f}</small>"
+            ), unsafe_allow_html=True)
+        with e3:
+            st.markdown(summary_box(
+                "ETH Loss",
+                f"{eth_l} pos<br><small style='font-size:11px;color:#ff1744'>₹{eth_tl:,.0f}</small>"
+            ), unsafe_allow_html=True)
+        with e4:
+            st.markdown(summary_box("ETH Positions", len(eth_orders)), unsafe_allow_html=True)
+        with e5:
+            st.markdown(summary_box(
+                "ETH Buy Lots",
+                f"{qty_to_lots(eth_bq, 'ETH')}L",
+                "#00e676"
+            ), unsafe_allow_html=True)
+        with e6:
+            st.markdown(summary_box(
+                "ETH Sell Lots",
+                f"{qty_to_lots(eth_sq, 'ETH')}L",
+                "#ff1744"
+            ), unsafe_allow_html=True)
 
     st.markdown("---")
 
