@@ -15,8 +15,8 @@ import mplfinance as mpf
 import matplotlib.pyplot as plt
 import io
 
-if not check_password():
-    st.stop()
+# if not check_password():
+#     st.stop()
 
 # ==========================================
 # CONFIGURATION
