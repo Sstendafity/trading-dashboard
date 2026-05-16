@@ -934,7 +934,7 @@ def live_dashboard(orders):
             eth_arrow = "▲" if eth_data["change_pct"] >= 0 else "▼"
             eth_chg_color = color_val(eth_data["change_pct"])
             st.markdown(
-                f'<div class="price-display {eth_color}" style="font-size:1.6rem">ETH ${eth_cp:,.2f}</div>'
+                f'<div class="price-display {eth_color}">ETH ${eth_cp:,.2f}</div>'
                 f'<div style="display:flex;gap:20px;margin-top:4px">'
                 f'<span><span class="stat-label">CHANGE </span><span style="{eth_chg_color};font-weight:700">{eth_arrow} {abs(eth_data["change_pct"]):.2f}%</span></span>'
                 f'<span><span class="stat-label">HIGH </span><span style="font-weight:700">${eth_data["high"]:,.2f}</span></span>'
