@@ -657,8 +657,10 @@ def telegram_command_listener(orders, cp):
                 order_pnls = []
 
                 ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 18)]
-                active_accounts = {o.get("account") for o in orders}
-                inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
+                active_accounts_btc = {o.get("account") for o in orders if o.get("symbol", "BTC") == "BTC"}
+                active_accounts_eth = {o.get("account") for o in orders if o.get("symbol") == "ETH"}
+                idle_btc = [a for a in ALL_ACCOUNTS if a not in active_accounts_btc]
+                idle_eth = [a for a in ALL_ACCOUNTS if a not in active_accounts_eth]
                 now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
                 for o in orders:
@@ -708,7 +710,8 @@ def telegram_command_listener(orders, cp):
                 msg += "\n".join(lines)
                 msg += (
                     f"\n\nTotal Orders: {len(orders)}\n"
-                    f"Idle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
+                    f"BTC Idle ({len(idle_btc)}): {', '.join(idle_btc) if idle_btc else 'None'}\n"
+                    f"ETH Idle ({len(idle_eth)}): {', '.join(idle_eth) if idle_eth else 'None'}"
                 )
 
             requests.post(
@@ -984,97 +987,103 @@ def live_dashboard(orders):
         elif not orders:
             st.info("No open positions to report.")
         else:
-            if send_report_btc:
-                fresh_btc = _do_fetch('BTC')
-                cp = fresh_btc["price"] if fresh_btc else cp
-            if send_report_eth:
-                fresh_eth = _do_fetch('ETH')
-                eth_cp = fresh_eth["price"] if fresh_eth else eth_cp
+            fresh_btc = _do_fetch('BTC')
+            fresh_eth = _do_fetch('ETH')
+            report_cp = fresh_btc["price"] if fresh_btc else cp
+            report_eth_cp = fresh_eth["price"] if fresh_eth else eth_cp
 
-            total_usd = total_profit = total_loss = total_inr = 0
-            profit_count = loss_count = 0
+            # ← Compute idle accounts BEFORE the loop, filtered by symbol
+            active_accounts_btc = {o.get("account") for o in orders if o.get("symbol", "BTC") == "BTC"}
+            active_accounts_eth = {o.get("account") for o in orders if o.get("symbol") == "ETH"}
+            inactive_accounts_btc = [a for a in ALL_ACCOUNTS if a not in active_accounts_btc]
+            inactive_accounts_eth = [a for a in ALL_ACCOUNTS if a not in active_accounts_eth]
+
+            # Calculate per-symbol totals
+            btc_pnls = []
+            eth_pnls = []
+            btc_profit = btc_loss = btc_tp = btc_tl = btc_net = btc_net_usd = 0
+            eth_profit = eth_loss = eth_tp = eth_tl = eth_net = eth_net_usd = 0
             buy_qty_btc = sell_qty_btc = buy_qty_eth = sell_qty_eth = 0
-            lines_btc = []
-            lines_eth = []
-            order_pnls = []
-            ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 18)]
 
             for o in orders:
                 sym = o.get("symbol", "BTC")
-                price = eth_cp if sym == "ETH" else cp
+                price = report_eth_cp if sym == "ETH" else report_cp
                 running_usd = (price - o.get("entry_price", 0)) * o.get("qty", 0) if o.get("side") == "Buy" else (o.get("entry_price", 0) - price) * o.get("qty", 0)
                 running_inr = running_usd * USD_TO_INR
-                total_usd += running_usd
-                total_inr += running_inr
-                if running_inr > 0: profit_count += 1; total_profit += running_inr
-                elif running_inr < 0: loss_count += 1; total_loss += running_inr
-                order_pnls.append((o, running_usd, running_inr))
                 qty = o.get("qty", 0) or 0
-                if o.get("side") == "Buy":
-                    if sym == "ETH": buy_qty_eth += qty
-                    else: buy_qty_btc += qty
-                else:
-                    if sym == "ETH": sell_qty_eth += qty
-                    else: sell_qty_btc += qty
-
-            order_pnls.sort(key=lambda x: x[2], reverse=True)
-            for o, running_usd, running_inr in order_pnls:
-                sym = o.get("symbol", "BTC")
+                lots = qty_to_lots(qty, sym)
                 side_emoji = "🟢" if o.get("side") == "Buy" else "🔴"
                 pnl_sign = "+" if running_inr >= 0 else ""
-                lots = qty_to_lots(o.get("qty", 0), sym)
-                if send_report_btc and sym == "BTC":
-                    active_accounts_btc = {o.get("account") for o in orders}
-                    inactive_accounts_btc = [a for a in ALL_ACCOUNTS if a not in active_accounts_btc]
-                    lines_btc.append(
-                        f"  {side_emoji} <b>{o.get('account')}</b> "
-                        f"@ ${o.get('entry_price', 0):,.1f} | {lots} lots "
-                        f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
-                    )
-                elif send_report_eth and sym == "ETH":
-                    active_accounts_eth = {o.get("account") for o in orders}
-                    inactive_accounts_eth = [a for a in ALL_ACCOUNTS if a not in active_accounts_eth]
-                    lines_eth.append(
-                        f"  {side_emoji} <b>{o.get('account')}</b> "
-                        f"@ ${o.get('entry_price', 0):,.1f} | {lots} lots "
-                        f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
-                    )
-
-            total_sign = "+" if total_inr >= 0 else ""
-            if send_report_btc:
-                msg = (
-                    f"BTC Report\n"
-                    f"₿ <code>${cp:,.1f}</code>\n"
-                    f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
-                    f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
-                    f"<b>T</b>: <code>{total_sign}₹{total_inr:,.0f}</code>\n"
-                    f"BTC BQ: {btc_to_lots(buy_qty_btc)} | SQ: {btc_to_lots(sell_qty_btc)} lots\n\n"
+                line = (
+                    f"  {side_emoji} <b>{o.get('account')}</b> "
+                    f"@ ${o.get('entry_price', 0):,.2f} | {lots} lots "
+                    f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
                 )
-                msg += "\n".join(lines_btc)
-                msg += f"\n\nTotal Orders: {len(orders)}\nIdle Accounts ({len(inactive_accounts_btc)}): {', '.join(inactive_accounts_btc) if inactive_accounts_btc else 'None'}"
-
-            if send_report_eth:
-                msg = (
-                    f"ETH Report\n"
-                    f"Ξ <code>${eth_cp:,.2f}</code>\n"
-                    f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
-                    f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
-                    f"<b>T</b>: <code>{total_sign}₹{total_inr:,.0f}</code>\n"
-                    f"ETH BQ: {qty_to_lots(buy_qty_eth, 'ETH')} | SQ: {qty_to_lots(sell_qty_eth, 'ETH')} lots\n\n"
-                )
-                msg += "\n".join(lines_eth)
-                msg += f"\n\nTotal Orders: {len(orders)}\nIdle Accounts ({len(inactive_accounts_eth)}): {', '.join(inactive_accounts_eth) if inactive_accounts_eth else 'None'}"
-            
+                if sym == "BTC":
+                    btc_pnls.append((running_inr, running_usd, line))
+                    btc_net += running_inr
+                    btc_net_usd += running_usd
+                    if running_inr > 0: btc_profit += 1; btc_tp += running_inr
+                    elif running_inr < 0: btc_loss += 1; btc_tl += running_inr
+                    if o.get("side") == "Buy": buy_qty_btc += qty
+                    else: sell_qty_btc += qty
+                else:
+                    eth_pnls.append((running_inr, running_usd, line))
+                    eth_net += running_inr
+                    eth_net_usd += running_usd
+                    if running_inr > 0: eth_profit += 1; eth_tp += running_inr
+                    elif running_inr < 0: eth_loss += 1; eth_tl += running_inr
+                    if o.get("side") == "Buy": buy_qty_eth += qty
+                    else: sell_qty_eth += qty
 
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-            all_ok = True
-            for cid in TELEGRAM_CHAT_IDS_UI:
-                r = requests.post(url, json={"chat_id": cid, "text": msg, "parse_mode": "HTML"}, timeout=10)
-                if not r.ok: all_ok = False
-            if all_ok:
-                st.success("✅ Report sent!")
-            else:
-                st.error("❌ Failed to send to some chats.")
+
+            if send_report_btc and btc_pnls:
+                btc_pnls.sort(key=lambda x: x[0], reverse=True)
+                btc_sign = "+" if btc_net >= 0 else ""
+                msg_btc = (
+                    f"₿ <b>BTC Report</b>  <code>${report_cp:,.1f}</code>\n"
+                    f"P: {btc_profit} | <code>+₹{btc_tp:,.0f}</code>\n"
+                    f"L: {btc_loss} | <code>₹{btc_tl:,.0f}</code>\n"
+                    f"<b>T</b>: <code>{btc_sign}₹{btc_net:,.0f}</code> (<code>{btc_sign}${btc_net_usd:,.2f}</code>)\n"
+                    f"BQ: {btc_to_lots(buy_qty_btc)}L | SQ: {btc_to_lots(sell_qty_btc)}L\n\n"
+                )
+                msg_btc += "\n".join(l for _, _, l in btc_pnls)
+                msg_btc += (
+                    f"\n\nTotal: {len(btc_pnls)}\n"
+                    f"Idle ({len(inactive_accounts_btc)}): {', '.join(inactive_accounts_btc) if inactive_accounts_btc else 'None'}"
+                )
+                all_ok = True
+                for cid in TELEGRAM_CHAT_IDS_UI:
+                    r = requests.post(url, json={"chat_id": cid, "text": msg_btc, "parse_mode": "HTML"}, timeout=10)
+                    if not r.ok: all_ok = False
+                if all_ok: st.success("✅ BTC report sent!")
+                else: st.error("❌ Failed to send BTC report.")
+
+            if send_report_eth and eth_pnls:
+                eth_pnls.sort(key=lambda x: x[0], reverse=True)
+                eth_sign = "+" if eth_net >= 0 else ""
+                msg_eth = (
+                    f"Ξ <b>ETH Report</b>  <code>${report_eth_cp:,.2f}</code>\n"
+                    f"P: {eth_profit} | <code>+₹{eth_tp:,.0f}</code>\n"
+                    f"L: {eth_loss} | <code>₹{eth_tl:,.0f}</code>\n"
+                    f"<b>T</b>: <code>{eth_sign}₹{eth_net:,.0f}</code> (<code>{eth_sign}${eth_net_usd:,.2f}</code>)\n"
+                    f"BQ: {qty_to_lots(buy_qty_eth,'ETH')}L | SQ: {qty_to_lots(sell_qty_eth,'ETH')}L\n\n"
+                )
+                msg_eth += "\n".join(l for _, _, l in eth_pnls)
+                msg_eth += (
+                    f"\n\nTotal: {len(eth_pnls)}\n"
+                    f"Idle ({len(inactive_accounts_eth)}): {', '.join(inactive_accounts_eth) if inactive_accounts_eth else 'None'}"
+                )
+                all_ok = True
+                for cid in TELEGRAM_CHAT_IDS_UI:
+                    r = requests.post(url, json={"chat_id": cid, "text": msg_eth, "parse_mode": "HTML"}, timeout=10)
+                    if not r.ok: all_ok = False
+                if all_ok: st.success("✅ ETH report sent!")
+                else: st.error("❌ Failed to send ETH report.")
+
+            elif send_report_eth and not eth_pnls:
+                st.info("No ETH positions to report.")
 
     # Chart buttons
     if send_btc:
