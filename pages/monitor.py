@@ -1024,16 +1024,16 @@ def live_dashboard(orders):
                 pnl_sign = "+" if running_inr >= 0 else ""
                 lots = qty_to_lots(o.get("qty", 0), sym)
                 if sym == "BTC":
-                    active_accounts = {o.get("account") for o in orders}
-                    inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
+                    active_accounts_btc = {o.get("account") for o in orders}
+                    inactive_accounts_btc = [a for a in ALL_ACCOUNTS if a not in active_accounts_btc]
                     lines_btc.append(
                         f"  {side_emoji} <b>{o.get('account')}</b> "
                         f"@ ${o.get('entry_price', 0):,.1f} | {lots} lots "
                         f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
                     )
                 else:
-                    active_accounts = {o.get("account") for o in orders}
-                    inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
+                    active_accounts_eth = {o.get("account") for o in orders}
+                    inactive_accounts_eth = [a for a in ALL_ACCOUNTS if a not in active_accounts_eth]
                     lines_eth.append(
                         f"  {side_emoji} <b>{o.get('account')}</b> "
                         f"@ ${o.get('entry_price', 0):,.1f} | {lots} lots "
@@ -1051,7 +1051,7 @@ def live_dashboard(orders):
                     f"BTC BQ: {btc_to_lots(buy_qty_btc)} | SQ: {btc_to_lots(sell_qty_btc)} lots\n\n"
                 )
                 msg += "\n".join(lines_btc)
-                msg += f"\n\nTotal Orders: {len(orders)}\nIdle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
+                msg += f"\n\nTotal Orders: {len(orders)}\nIdle Accounts ({len(inactive_accounts_btc)}): {', '.join(inactive_accounts_btc) if inactive_accounts_btc else 'None'}"
 
             if send_report_eth:
                 msg = (
@@ -1063,7 +1063,7 @@ def live_dashboard(orders):
                     f"ETH BQ: {qty_to_lots(buy_qty_eth, 'ETH')} | SQ: {qty_to_lots(sell_qty_eth, 'ETH')} lots\n\n"
                 )
                 msg += "\n".join(lines_eth)
-                msg += f"\n\nTotal Orders: {len(orders)}\nIdle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
+                msg += f"\n\nTotal Orders: {len(orders)}\nIdle Accounts ({len(inactive_accounts_eth)}): {', '.join(inactive_accounts_eth) if inactive_accounts_eth else 'None'}"
             
 
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
