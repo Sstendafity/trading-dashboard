@@ -1031,7 +1031,7 @@ def live_dashboard(orders):
                         f"@ ${o.get('entry_price', 0):,.1f} | {lots} lots "
                         f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
                     )
-                else:
+                elif sym == "ETH":
                     active_accounts_eth = {o.get("account") for o in orders}
                     inactive_accounts_eth = [a for a in ALL_ACCOUNTS if a not in active_accounts_eth]
                     lines_eth.append(
