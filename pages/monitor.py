@@ -1056,12 +1056,11 @@ def live_dashboard(orders):
             if send_report_eth:
                 msg = (
                     f"ETH Report\n"
-                    f"₿ <code>${cp:,.1f}</code>  Ξ <code>${eth_cp:,.2f}</code>\n"
+                    f"Ξ <code>${eth_cp:,.2f}</code>\n"
                     f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
                     f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
                     f"<b>T</b>: <code>{total_sign}₹{total_inr:,.0f}</code>\n"
-                    f"BTC BQ: {btc_to_lots(buy_qty_btc)} | SQ: {btc_to_lots(sell_qty_btc)} lots\n"
-                f"ETH BQ: {qty_to_lots(buy_qty_eth, 'ETH')} | SQ: {qty_to_lots(sell_qty_eth, 'ETH')} lots\n\n"
+                    f"ETH BQ: {qty_to_lots(buy_qty_eth, 'ETH')} | SQ: {qty_to_lots(sell_qty_eth, 'ETH')} lots\n\n"
                 )
                 msg += "\n".join(lines_eth)
                 msg += f"\n\nTotal Orders: {len(orders)}\nIdle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
