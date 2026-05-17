@@ -1023,7 +1023,7 @@ def live_dashboard(orders):
                 side_emoji = "🟢" if o.get("side") == "Buy" else "🔴"
                 pnl_sign = "+" if running_inr >= 0 else ""
                 lots = qty_to_lots(o.get("qty", 0), sym)
-                if sym == "BTC":
+                if send_report_btc and sym == "BTC":
                     active_accounts_btc = {o.get("account") for o in orders}
                     inactive_accounts_btc = [a for a in ALL_ACCOUNTS if a not in active_accounts_btc]
                     lines_btc.append(
@@ -1031,7 +1031,7 @@ def live_dashboard(orders):
                         f"@ ${o.get('entry_price', 0):,.1f} | {lots} lots "
                         f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
                     )
-                elif sym == "ETH":
+                elif send_report_eth and sym == "ETH":
                     active_accounts_eth = {o.get("account") for o in orders}
                     inactive_accounts_eth = [a for a in ALL_ACCOUNTS if a not in active_accounts_eth]
                     lines_eth.append(
