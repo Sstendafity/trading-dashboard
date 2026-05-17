@@ -158,7 +158,7 @@
     "symbol": "ETH",
     "side": "Sell",
     "entry_price": 2249.25,
-    "qty": 0.2,
+    "qty": 0.02,
     "liquidation": null,
     "target": null,
     "stop_loss": null,
