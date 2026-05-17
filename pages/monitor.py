@@ -993,6 +993,7 @@ def live_dashboard(orders):
             report_eth_cp = fresh_eth["price"] if fresh_eth else eth_cp
 
             # ← Compute idle accounts BEFORE the loop, filtered by symbol
+            ALL_ACCOUNTS = [f"A-{i}" for i in range(1, 18)]
             active_accounts_btc = {o.get("account") for o in orders if o.get("symbol", "BTC") == "BTC"}
             active_accounts_eth = {o.get("account") for o in orders if o.get("symbol") == "ETH"}
             inactive_accounts_btc = [a for a in ALL_ACCOUNTS if a not in active_accounts_btc]
