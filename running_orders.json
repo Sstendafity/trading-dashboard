@@ -135,9 +135,10 @@
   },
   {
     "account": "A-8",
+    "symbol": "BTC",
     "side": "Buy",
-    "entry_price": 78361.5,
-    "qty": 0.002,
+    "entry_price": 76672.5,
+    "qty": 0.009000000000000001,
     "liquidation": null,
     "target": null,
     "stop_loss": null,
