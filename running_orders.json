@@ -89,6 +89,7 @@
   },
   {
     "account": "A-1",
+    "symbol": "BTC",
     "side": "Buy",
     "entry_price": 81526.5,
     "qty": 0.007,
