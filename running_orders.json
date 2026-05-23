@@ -47,10 +47,11 @@
   },
   {
     "account": "A-14",
+    "symbol": "BTC",
     "side": "Sell",
     "entry_price": 66405.4,
     "qty": 0.002,
-    "liquidation": null,
+    "liquidation": 87378.4,
     "target": null,
     "stop_loss": null,
     "added_at": "2026-04-12 02:39:25.736183",
