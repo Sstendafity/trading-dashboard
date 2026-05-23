@@ -67,9 +67,10 @@
   },
   {
     "account": "A-3",
+    "symbol": "BTC",
     "side": "Sell",
-    "entry_price": 76587.5,
-    "qty": 0.01,
+    "entry_price": 76405.0,
+    "qty": 0.012,
     "liquidation": null,
     "target": null,
     "stop_loss": null,
