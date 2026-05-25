@@ -34,7 +34,7 @@ ACCOUNTS = [f"A-{i}" for i in range(1, 18)]
 ACCOUNT_GROUP = {
     "A-1": "Delta", "A-2": "Delta", "A-3": "Delta", "A-4": "Delta", "A-5": "Delta", "A-6": "Delta",
     "A-7": "CS", "A-8": "CS", "A-9": "CS", "A-10": "CS", "A-11": "CS",
-    "A-12": "Pi42", "A-13": "CDX", "A-14": "MDX", "A-15": "ZEP", "A-16": "BN", "A-17": "BYT"
+    "A-12": "Pi42", "A-13": "CDX", "A-14": "MDX", "A-15": "ZEP", "A-16": "GTS", "A-17": "BN", "A-18": "BYT"
 }
 
 SYMBOLS = ["BTC", "ETH"]
