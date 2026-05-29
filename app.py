@@ -416,11 +416,8 @@ def process_gts_format(df, filename):
             'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID'
         ])
 
-    # ==========================================
-    # 2. FUNDING FEES (no Order-Id, treated separately)
-    # ==========================================
+    # ---- Funding fees ----
     funding = df[df['Type'] == 'Funding Fee'].copy()
-
     if not funding.empty:
         funding['Realised P&L(INR)'] = funding['Amount'] * USD_TO_INR
         funding['Trading Fees(INR)'] = 0.0
@@ -434,17 +431,107 @@ def process_gts_format(df, filename):
         funding['Account'] = account_name
         funding['Date'] = funding['dt'].dt.strftime('%Y-%m-%d')
         funding['Time'] = funding['dt'].dt.strftime('%H:%M:%S')
-
-        funding_rows = funding[[
-            'Account', 'Date', 'Time', 'Contract', 'Side',
-            'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID'
-        ]]
+        funding_rows = funding[['Account', 'Date', 'Time', 'Contract', 'Side',
+                                'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']]
     else:
-        funding_rows = pd.DataFrame(columns=[
-            'Account', 'Date', 'Time', 'Contract', 'Side',
-            'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID'
-        ])
+        funding_rows = pd.DataFrame(columns=['Account', 'Date', 'Time', 'Contract', 'Side',
+                                            'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID'])
 
+    return trade_rows
+
+def process_binance_format(df, filename):
+    """Logic for Binance Futures Transaction History format (A-17)
+    Columns: Time, Type, Amount, Asset, Symbol, Transaction ID
+    (plus unnamed filler columns from Excel export)
+    Types: REALIZED_PNL, COMMISSION, FUNDING_FEE, TRANSFER
+    Values in USDT — convert at 85 INR/USDT
+    Date format: YY-MM-DD HH:MM:SS
+    """
+    account_name = filename.split()[0].replace('.xlsx', '').replace('.csv', '')
+    account_name = re.sub(r'^([a-zA-Z]+)(\d+)$', r'\1-\2', account_name)
+ 
+    USD_TO_INR = 85.0
+ 
+    # Drop unnamed filler columns (Excel export artifact)
+    df = df[[c for c in df.columns if 'Unnamed' not in str(c)]].copy()
+ 
+    # Parse datetime — format is YY-MM-DD HH:MM:SS
+    df['dt'] = pd.to_datetime(df['Time'], format='%y-%m-%d %H:%M:%S', errors='coerce')
+    # Fallback for other formats
+    mask_failed = df['dt'].isna()
+    if mask_failed.any():
+        df.loc[mask_failed, 'dt'] = pd.to_datetime(
+            df.loc[mask_failed, 'Time'], errors='coerce'
+        )
+    df = df.dropna(subset=['dt']).copy()
+ 
+    df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
+    df['Transaction ID'] = df['Transaction ID'].astype(str).str.strip()
+ 
+    # ---- Realized PNL trades (grouped by Transaction ID) ----
+    trades = df[
+        (df['Type'] == 'REALIZED_PNL') &
+        (df['Transaction ID'].notna()) &
+        (df['Transaction ID'] != '') &
+        (df['Transaction ID'] != 'nan')
+    ].copy()
+ 
+    if not trades.empty:
+        trade_pnl = (
+            trades.groupby('Transaction ID')
+            .agg(dt=('dt', 'first'), Symbol=('Symbol', 'first'), PnL_USDT=('Amount', 'sum'))
+            .reset_index()
+        )
+        commissions = df[
+            (df['Type'] == 'COMMISSION') &
+            (df['Transaction ID'].notna()) &
+            (df['Transaction ID'] != '') &
+            (df['Transaction ID'] != 'nan')
+        ].copy()
+        fee_by_txn = (
+            commissions.groupby('Transaction ID')['Amount']
+            .sum().abs().reset_index()
+            .rename(columns={'Amount': 'Fees_USDT'})
+        )
+        result = trade_pnl.merge(fee_by_txn, on='Transaction ID', how='left')
+        result['Fees_USDT'] = result['Fees_USDT'].fillna(0)
+        result['Realised P&L(INR)'] = result['PnL_USDT'] * USD_TO_INR
+        result['Trading Fees(INR)'] = result['Fees_USDT'] * USD_TO_INR
+        result['Order ID'] = result['Transaction ID'].astype(str)
+        result['Contract'] = result['Symbol'].astype(str).str.replace('USDT', '/USDT', regex=False)
+        result['Side'] = 'Unknown'
+        result['Status'] = 'closed'
+        result['Account'] = account_name
+        result['Date'] = result['dt'].dt.strftime('%Y-%m-%d')
+        result['Time'] = result['dt'].dt.strftime('%H:%M:%S')
+        trade_rows = result[['Account', 'Date', 'Time', 'Contract', 'Side',
+                              'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']]
+    else:
+        trade_rows = pd.DataFrame(columns=['Account', 'Date', 'Time', 'Contract', 'Side',
+                                           'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID'])
+ 
+    # ---- Funding fees ----
+    funding = df[df['Type'] == 'FUNDING_FEE'].copy()
+    if not funding.empty:
+        funding['Realised P&L(INR)'] = funding['Amount'] * USD_TO_INR
+        funding['Trading Fees(INR)'] = 0.0
+        funding['Order ID'] = (
+            funding['Symbol'].astype(str) + '_funding_' +
+            funding['dt'].dt.strftime('%Y%m%d%H%M%S') + '_' +
+            funding['Transaction ID'].astype(str)
+        )
+        funding['Contract'] = funding['Symbol'].astype(str).str.replace('USDT', '/USDT', regex=False)
+        funding['Side'] = 'Unknown'
+        funding['Status'] = 'closed'
+        funding['Account'] = account_name
+        funding['Date'] = funding['dt'].dt.strftime('%Y-%m-%d')
+        funding['Time'] = funding['dt'].dt.strftime('%H:%M:%S')
+        funding_rows = funding[['Account', 'Date', 'Time', 'Contract', 'Side',
+                                 'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']]
+    else:
+        funding_rows = pd.DataFrame(columns=['Account', 'Date', 'Time', 'Contract', 'Side',
+                                              'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID'])
+ 
     return pd.concat([trade_rows, funding_rows], ignore_index=True)
 
 def process_legacy_csv(df, filename):
@@ -509,6 +596,14 @@ def normalize_raw_data(file):
                 df = xl.parse('TXNHISTORY_STATEMENT')
                 return process_zebpay_format(df, file.name)
             
+            # Binance format (A-17) — detect by sheet name or column signature
+            if 'Sheet0' in xl.sheet_names:
+                df = xl.parse('Sheet0')
+                df_clean = df[[c for c in df.columns if 'Unnamed' not in str(c)]]
+                if 'Transaction ID' in df_clean.columns and 'Type' in df_clean.columns:
+                    if df_clean['Type'].isin(['REALIZED_PNL', 'COMMISSION', 'FUNDING_FEE', 'TRANSFER']).any():
+                        return process_binance_format(df, file.name)
+                    
             # Signature checks for other formats
             df_peek = pd.read_excel(file, header=None, nrows=15)
             file.seek(0)
