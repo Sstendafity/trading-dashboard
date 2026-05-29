@@ -83,10 +83,11 @@
   },
   {
     "account": "A-2",
+    "symbol": "BTC",
     "side": "Buy",
     "entry_price": 81535.0,
     "qty": 0.007,
-    "liquidation": null,
+    "liquidation": 72433.5,
     "target": null,
     "stop_loss": null,
     "added_at": "2026-04-19 07:23:02.882907",
