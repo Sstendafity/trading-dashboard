@@ -341,6 +341,112 @@ def process_coindcx_future(df, filename):
                    'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
     return df[target_cols]
 
+def process_gts_format(df, filename):
+    """Logic for GTS (Giottus) transaction_history format (A-16)"""
+    account_name = filename.split()[0].replace('.csv', '').replace('.xlsx', '')
+    account_name = re.sub(r'^([a-zA-Z]+)(\d+)$', r'\1-\2', account_name)
+
+    USD_TO_INR = 85.0
+
+    # Parse datetime
+    df['dt'] = pd.to_datetime(df['Time'], errors='coerce')
+    df = df.dropna(subset=['dt']).copy()
+
+    # Convert Amount to numeric (handles +/- signs and scientific notation)
+    df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
+    df['Total Commission'] = pd.to_numeric(df['Total Commission'], errors='coerce').fillna(0)
+
+    # ==========================================
+    # 1. REALIZED PNL TRADES (grouped by Order-Id)
+    # ==========================================
+    trades = df[
+        (df['Type'] == 'Realized PNL') &
+        (df['Order-Id'].notna()) &
+        (df['Order-Id'].astype(str).str.strip() != '')
+    ].copy()
+
+    if not trades.empty:
+        trade_pnl = (
+            trades.groupby('Order-Id')
+            .agg(
+                dt=('dt', 'first'),
+                Symbol=('Symbol', 'first'),
+                PnL_USDT=('Amount', 'sum'),
+            )
+            .reset_index()
+        )
+
+        # Get commissions for same Order-Id
+        commissions = df[
+            (df['Type'] == 'Commission') &
+            (df['Order-Id'].notna()) &
+            (df['Order-Id'].astype(str).str.strip() != '')
+        ].copy()
+        commissions['Total Commission'] = pd.to_numeric(
+            commissions['Total Commission'], errors='coerce'
+        ).fillna(0)
+        fee_by_order = (
+            commissions.groupby('Order-Id')['Total Commission']
+            .sum()
+            .abs()
+            .reset_index()
+            .rename(columns={'Total Commission': 'Fees_USDT'})
+        )
+
+        result = trade_pnl.merge(fee_by_order, on='Order-Id', how='left')
+        result['Fees_USDT'] = result['Fees_USDT'].fillna(0)
+
+        result['Realised P&L(INR)'] = result['PnL_USDT'] * USD_TO_INR
+        result['Trading Fees(INR)'] = result['Fees_USDT'] * USD_TO_INR
+        result['Order ID'] = result['Order-Id'].astype(str)
+        result['Contract'] = result['Symbol']
+        result['Side'] = 'Unknown'
+        result['Status'] = 'closed'
+        result['Account'] = account_name
+        result['Date'] = result['dt'].dt.strftime('%Y-%m-%d')
+        result['Time'] = result['dt'].dt.strftime('%H:%M:%S')
+
+        trade_rows = result[[
+            'Account', 'Date', 'Time', 'Contract', 'Side',
+            'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID'
+        ]]
+    else:
+        trade_rows = pd.DataFrame(columns=[
+            'Account', 'Date', 'Time', 'Contract', 'Side',
+            'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID'
+        ])
+
+    # ==========================================
+    # 2. FUNDING FEES (no Order-Id, treated separately)
+    # ==========================================
+    funding = df[df['Type'] == 'Funding Fee'].copy()
+
+    if not funding.empty:
+        funding['Realised P&L(INR)'] = funding['Amount'] * USD_TO_INR
+        funding['Trading Fees(INR)'] = 0.0
+        funding['Order ID'] = (
+            funding['Symbol'].astype(str) + '_funding_' +
+            funding['dt'].dt.strftime('%Y%m%d%H%M%S')
+        )
+        funding['Contract'] = funding['Symbol']
+        funding['Side'] = 'Unknown'
+        funding['Status'] = 'closed'
+        funding['Account'] = account_name
+        funding['Date'] = funding['dt'].dt.strftime('%Y-%m-%d')
+        funding['Time'] = funding['dt'].dt.strftime('%H:%M:%S')
+
+        funding_rows = funding[[
+            'Account', 'Date', 'Time', 'Contract', 'Side',
+            'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID'
+        ]]
+    else:
+        funding_rows = pd.DataFrame(columns=[
+            'Account', 'Date', 'Time', 'Contract', 'Side',
+            'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID'
+        ])
+
+    return pd.concat([trade_rows, funding_rows], ignore_index=True)
+
 def process_legacy_csv(df, filename):
     """Logic for the original CSV format"""
     # Safety check: if it's a random file (like deposits), ignore it
@@ -429,6 +535,12 @@ def normalize_raw_data(file):
             file.seek(0)
             lines = [file.readline().decode('utf-8', errors='ignore') for _ in range(15)]
             file.seek(0)
+
+            first_line = lines[0]
+            # 0. Check Binance format (A-16) — detect by column headers
+            if "Order-Id" in first_line and "Realized PNL" in first_line or "Total Commission" in first_line:
+                df = pd.read_csv(file)
+                return process_gts_format(df, file.name)
             
             # 1. Check A6 CoinDCX format in CSV
             coindcx_skip = -1
@@ -440,7 +552,6 @@ def normalize_raw_data(file):
                 df = pd.read_csv(file, skiprows=coindcx_skip)
                 return process_coindcx_future(df, file.name)
             
-            first_line = lines[0]
             # 2. Check A-4 format (CSV) - Look for columns specific to Trades file
             if "Trade ID" in first_line and "Commission" in first_line:
                 df = pd.read_csv(file)
@@ -722,8 +833,9 @@ else:
                 elif acc_upper == 'A-13': grp_label = 'CDX'
                 elif acc_upper == 'A-14': grp_label = 'Mudrex'
                 elif acc_upper == 'A-15': grp_label = 'Zebpay'
-                elif acc_upper == 'A-16': grp_label = 'Binance'
-                elif acc_upper == 'A-17': grp_label = 'Bybit'
+                elif acc_upper == 'A-16': grp_label = 'Giottus'
+                elif acc_upper == 'A-17': grp_label = 'Binance'
+                elif acc_upper == 'A-18': grp_label = 'Bybit'
                 else: grp_label = 'Other'
                 
                 acc_net_color = "green" if acc_net > 0 else ("red" if acc_net < 0 else "normal")
