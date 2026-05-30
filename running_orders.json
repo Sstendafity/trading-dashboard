@@ -214,10 +214,10 @@
   },
   {
     "account": "A-4",
-    "symbol": "BTC",
+    "symbol": "ETH",
     "side": "Buy",
     "entry_price": 2015.35,
-    "qty": 0.005,
+    "qty": 0.05,
     "liquidation": null,
     "target": null,
     "stop_loss": null,
