@@ -178,18 +178,6 @@
     "alert_threshold": 3.0
   },
   {
-    "account": "A-13",
-    "symbol": "BTC",
-    "side": "Buy",
-    "entry_price": 73639.2,
-    "qty": 0.02,
-    "liquidation": 71035.8,
-    "target": null,
-    "stop_loss": null,
-    "added_at": "2026-05-29 10:39:13.070090",
-    "alert_threshold": 3.0
-  },
-  {
     "account": "A-4",
     "symbol": "ETH",
     "side": "Buy",
