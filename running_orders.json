@@ -22,5 +22,17 @@
     "stop_loss": null,
     "added_at": "2026-06-03 06:25:09.237541",
     "alert_threshold": 3.0
+  },
+  {
+    "account": "A-3",
+    "symbol": "BTC",
+    "side": "Sell",
+    "entry_price": 69665.5,
+    "qty": 0.022,
+    "liquidation": null,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-06-03 06:25:55.489741",
+    "alert_threshold": 3.0
   }
 ]
