@@ -28,7 +28,7 @@
     "symbol": "BTC",
     "side": "Sell",
     "entry_price": 69062.0,
-    "qty": 0.024,
+    "qty": 0.004,
     "liquidation": null,
     "target": null,
     "stop_loss": null,
