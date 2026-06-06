@@ -593,6 +593,79 @@ def dialog_edit_position(orders, idx):
             st.success("✅ Position updated.")
             st.rerun()
 
+@st.dialog("🗑️ Bulk Close Positions", width="large")
+def dialog_bulk_close(orders, filtered):
+    if "bulk_close_version" not in st.session_state:
+        st.session_state["bulk_close_version"] = 0
+    if "bulk_select_all" not in st.session_state:
+        st.session_state["bulk_select_all"] = False
+
+    # Select All / Deselect All
+    sa1, sa2, _ = st.columns([2, 2, 5])
+    with sa1:
+        if st.button("☑️ Select All", use_container_width=True, key="bulk_sel_all"):
+            st.session_state["bulk_select_all"] = True
+            st.session_state["bulk_close_version"] += 1
+            st.rerun()
+    with sa2:
+        if st.button("⬜ Deselect All", use_container_width=True, key="bulk_desel_all"):
+            st.session_state["bulk_select_all"] = False
+            st.session_state["bulk_close_version"] += 1
+            st.rerun()
+
+    st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
+
+    version = st.session_state["bulk_close_version"]
+    default_checked = st.session_state["bulk_select_all"]
+
+    selected_to_close = []
+    for i, (o, c) in enumerate(filtered):
+        sym = o.get("symbol", "BTC")
+        side_label = "BUY" if o["side"] == "Buy" else "SELL"
+        pnl_color = "#00e676" if c["running_inr"] >= 0 else "#ff1744"
+
+        col_chk, col_lbl = st.columns([1, 12])
+        with col_chk:
+            checked = st.checkbox(
+                "",
+                value=default_checked,
+                key=f"bulk_chk_{version}_{i}",
+                label_visibility="collapsed"
+            )
+        with col_lbl:
+            st.markdown(
+                f"<span style='font-family:monospace'>"
+                f"<b>{o['account']}</b> [{sym}] {side_label} "
+                f"@ ${o.get('entry_price', 0):,.2f} | "
+                f"{qty_to_lots(o.get('qty', 0) or 0, sym)} lots → "
+                f"<span style='color:{pnl_color}'>{fmt_inr(c['running_inr'])}</span>"
+                f"</span>",
+                unsafe_allow_html=True
+            )
+        if checked:
+            selected_to_close.append(o)
+
+    st.markdown("---")
+
+    if selected_to_close:
+        st.warning(f"⚠️ {len(selected_to_close)} position(s) selected.")
+        if st.button(
+            f"🗑️ Close {len(selected_to_close)} Position(s)",
+            type="primary",
+            use_container_width=True,
+            key="bulk_close_confirm"
+        ):
+            for o in selected_to_close:
+                if o in orders:
+                    orders.remove(o)
+            save_orders(orders)
+            st.session_state["bulk_select_all"] = False
+            st.session_state["bulk_close_version"] += 1
+            st.success(f"✅ {len(selected_to_close)} position(s) closed.")
+            st.rerun()
+    else:
+        st.info("No positions selected.")
+
 # ==========================================
 # TELEGRAM COMMAND LISTENER FRAGMENT
 # ==========================================
@@ -1367,88 +1440,12 @@ if orders:
     if not filtered:
         st.info("No positions match the filter.")
 
-    # ==========================================
-    # BULK CLOSE
-    # ==========================================
-    if filtered:
-        if "bulk_close_version" not in st.session_state:
-            st.session_state["bulk_close_version"] = 0
-        if "bulk_select_all" not in st.session_state:
-            st.session_state["bulk_select_all"] = False
+    if st.button("➕ Add New Position"):
+        dialog_add_position(orders)
 
-        st.markdown("""
-        <div style="background:rgba(255,23,68,0.05);border:1px solid rgba(255,23,68,0.25);
-                    border-radius:10px;padding:16px 20px;margin-bottom:16px">
-        <div style="font-size:15px;font-weight:700;margin-bottom:12px;color:#ff1744">
-            🗑️ Bulk Close Positions
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Select All / Deselect All row at the top
-        sa_col1, sa_col2, sa_col3 = st.columns([2, 2, 5])
-        with sa_col1:
-            if st.button("☑️ Select All", use_container_width=True, key="bulk_sel_all"):
-                st.session_state["bulk_select_all"] = True
-                st.session_state["bulk_close_version"] += 1
-                st.rerun()
-        with sa_col2:
-            if st.button("⬜ Deselect All", use_container_width=True, key="bulk_desel_all"):
-                st.session_state["bulk_select_all"] = False
-                st.session_state["bulk_close_version"] += 1
-                st.rerun()
-
-        version = st.session_state["bulk_close_version"]
-        default_checked = st.session_state["bulk_select_all"]
-
-        st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
-
-        # Checkboxes per position
-        selected_to_close = []
-        for i, (o, c) in enumerate(filtered):
-            sym = o.get("symbol", "BTC")
-            side_label = "BUY" if o["side"] == "Buy" else "SELL"
-            pnl_color = "#00e676" if c["running_inr"] >= 0 else "#ff1744"
-            label_html = (
-                f"<span style='font-family:monospace'>"
-                f"<b>{o['account']}</b> [{sym}] {side_label} "
-                f"@ ${o.get('entry_price', 0):,.2f} | "
-                f"{qty_to_lots(o.get('qty',0) or 0, sym)} lots → "
-                f"<span style='color:{pnl_color}'>{fmt_inr(c['running_inr'])}</span>"
-                f"</span>"
-            )
-            col_chk, col_lbl = st.columns([1, 12])
-            with col_chk:
-                checked = st.checkbox(
-                    "",
-                    value=default_checked,
-                    key=f"bulk_chk_{version}_{i}",
-                    label_visibility="collapsed"
-                )
-            with col_lbl:
-                st.markdown(label_html, unsafe_allow_html=True)
-            if checked:
-                selected_to_close.append(o)
-
-        st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
-
-        if selected_to_close:
-            st.warning(f"⚠️ {len(selected_to_close)} position(s) selected for closing.")
-            if st.button(
-                f"🗑️ Close {len(selected_to_close)} Position(s)",
-                type="primary",
-                use_container_width=True,
-                key="bulk_close_confirm"
-            ):
-                for o in selected_to_close:
-                    if o in orders:
-                        orders.remove(o)
-                save_orders(orders)
-                st.session_state["bulk_select_all"] = False
-                st.session_state["bulk_close_version"] += 1
-                st.success(f"✅ {len(selected_to_close)} position(s) closed.")
-                st.rerun()
-
-        st.markdown("</div>", unsafe_allow_html=True)
+    if orders and filtered:
+        if st.button("🗑️ Bulk Close Positions"):
+            dialog_bulk_close(orders, filtered)
 
     # ==========================================
     # POSITION CARDS LOOP
