@@ -597,24 +597,25 @@ def dialog_edit_position(orders, idx):
 def dialog_bulk_close(orders, filtered):
     if "bulk_close_version" not in st.session_state:
         st.session_state["bulk_close_version"] = 0
-    if "bulk_select_all" not in st.session_state:
-        st.session_state["bulk_select_all"] = False
 
     version = st.session_state["bulk_close_version"]
-    default_checked = st.session_state["bulk_select_all"]
 
-    # Select All / Deselect All
+    # Select All / Deselect All — no st.rerun(), pre-set keys instead
     sa1, sa2, _ = st.columns([2, 2, 5])
     with sa1:
         if st.button("☑️ Select All", use_container_width=True, key="bulk_sel_all"):
-            st.session_state["bulk_select_all"] = True
-            st.session_state["bulk_close_version"] += 1
-            st.rerun()
+            new_v = version + 1
+            st.session_state["bulk_close_version"] = new_v
+            for i in range(len(filtered)):
+                st.session_state[f"bulk_chk_{new_v}_{i}"] = True
+            version = new_v
     with sa2:
         if st.button("⬜ Deselect All", use_container_width=True, key="bulk_desel_all"):
-            st.session_state["bulk_select_all"] = False
-            st.session_state["bulk_close_version"] += 1
-            st.rerun()
+            new_v = version + 1
+            st.session_state["bulk_close_version"] = new_v
+            for i in range(len(filtered)):
+                st.session_state[f"bulk_chk_{new_v}_{i}"] = False
+            version = new_v
 
     st.markdown("<div style='margin-top:4px'></div>", unsafe_allow_html=True)
 
@@ -622,7 +623,6 @@ def dialog_bulk_close(orders, filtered):
     for i, (o, c) in enumerate(filtered):
         sym = o.get("symbol", "BTC")
         side_label = "BUY" if o["side"] == "Buy" else "SELL"
-        pnl_color = "#00c853" if c["running_inr"] >= 0 else "#ff1744"
         pnl_sign = "+" if c["running_inr"] >= 0 else ""
         exchange = ACCOUNT_GROUP.get(o["account"], "?")
         lots = qty_to_lots(o.get("qty", 0) or 0, sym)
@@ -632,12 +632,7 @@ def dialog_bulk_close(orders, filtered):
             f"${o.get('entry_price', 0):,.2f} · {lots} lots · "
             f"₹{pnl_sign}{c['running_inr']:,.0f}"
         )
-
-        checked = st.checkbox(
-            label,
-            value=default_checked,
-            key=f"bulk_chk_{version}_{i}",
-        )
+        checked = st.checkbox(label, key=f"bulk_chk_{version}_{i}")
         if checked:
             selected_to_close.append(o)
 
@@ -655,10 +650,8 @@ def dialog_bulk_close(orders, filtered):
                 if o in orders:
                     orders.remove(o)
             save_orders(orders)
-            st.session_state["bulk_select_all"] = False
-            st.session_state["bulk_close_version"] += 1
-            st.success(f"✅ {len(selected_to_close)} position(s) closed.")
-            st.rerun()
+            st.session_state["bulk_close_version"] = 0
+            st.rerun()  # ← only here, after actual deletion, closing dialog is fine
     else:
         st.info("No positions selected. Check positions above to close them.")
 
