@@ -1440,9 +1440,6 @@ if orders:
     if not filtered:
         st.info("No positions match the filter.")
 
-    if st.button("➕ Add New Position"):
-        dialog_add_position(orders)
-
     if orders and filtered:
         if st.button("🗑️ Bulk Close Positions"):
             dialog_bulk_close(orders, filtered)
