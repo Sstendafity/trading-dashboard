@@ -1371,51 +1371,59 @@ if orders:
     # BULK CLOSE
     # ==========================================
     if filtered:
-        with st.expander("🗑️ Bulk Close Positions", expanded=False):
-            st.caption("Select positions to close all at once.")
+        st.markdown("""
+        <div style="background:rgba(255,23,68,0.05);border:1px solid rgba(255,23,68,0.2);
+                    border-radius:10px;padding:16px;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:700;margin-bottom:10px">🗑️ Bulk Close Positions</div>
+        """, unsafe_allow_html=True)
 
-            # Checkboxes for each filtered position
-            selected_to_close = []
-            for i, (o, c) in enumerate(filtered):
-                sym = o.get("symbol", "BTC")
-                side_label = "BUY" if o["side"] == "Buy" else "SELL"
-                label = (
-                    f"{o['account']} [{sym}] {side_label} "
-                    f"@ ${o.get('entry_price', 0):,.2f} — "
-                    f"{fmt_inr(c['running_inr'])}"
-                )
-                if st.checkbox(label, key=f"bulk_chk_{i}"):
-                    selected_to_close.append(o)
+        # Build selection table
+        selection_data = pd.DataFrame([{
+            "Close": False,
+            "Account": o["account"],
+            "Symbol": o.get("symbol", "BTC"),
+            "Side": o["side"],
+            "Entry ($)": f"{o.get('entry_price', 0):,.2f}",
+            "Lots": qty_to_lots(o.get("qty", 0) or 0, o.get("symbol", "BTC")),
+            "Running P&L": fmt_inr(c["running_inr"]),
+        } for o, c in filtered])
 
-            st.markdown("---")
-            bc1, bc2, bc3 = st.columns([2, 2, 5])
-            with bc1:
-                if st.button("☑️ Select All", use_container_width=True):
-                    for i in range(len(filtered)):
-                        st.session_state[f"bulk_chk_{i}"] = True
-                    st.rerun()
-            with bc2:
-                if st.button("⬜ Deselect All", use_container_width=True):
-                    for i in range(len(filtered)):
-                        st.session_state[f"bulk_chk_{i}"] = False
-                    st.rerun()
+        edited = st.data_editor(
+            selection_data,
+            column_config={
+                "Close": st.column_config.CheckboxColumn("Close", default=False, width="small"),
+                "Account": st.column_config.TextColumn("Account", width="small"),
+                "Symbol": st.column_config.TextColumn("Symbol", width="small"),
+                "Side": st.column_config.TextColumn("Side", width="small"),
+                "Entry ($)": st.column_config.TextColumn("Entry ($)", width="medium"),
+                "Lots": st.column_config.NumberColumn("Lots", width="small"),
+                "Running P&L": st.column_config.TextColumn("Running P&L", width="medium"),
+            },
+            disabled=["Account", "Symbol", "Side", "Entry ($)", "Lots", "Running P&L"],
+            hide_index=True,
+            use_container_width=True,
+            key="bulk_close_editor"
+        )
 
-            if selected_to_close:
-                st.warning(f"⚠️ {len(selected_to_close)} position(s) selected for closing.")
-                if st.button(
-                    f"🗑️ Close {len(selected_to_close)} Position(s)",
-                    type="primary",
-                    use_container_width=True
-                ):
-                    for o in selected_to_close:
-                        if o in orders:
-                            orders.remove(o)
-                    save_orders(orders)
-                    # Clear checkboxes
-                    for i in range(len(filtered)):
-                        st.session_state.pop(f"bulk_chk_{i}", None)
-                    st.success(f"✅ {len(selected_to_close)} position(s) closed.")
-                    st.rerun()
+        selected_indices = edited[edited["Close"]].index.tolist()
+        selected_to_close = [filtered[i][0] for i in selected_indices]
+
+        if selected_to_close:
+            st.warning(f"⚠️ {len(selected_to_close)} position(s) selected.")
+            if st.button(
+                f"🗑️ Close {len(selected_to_close)} Position(s)",
+                type="primary",
+                use_container_width=True,
+                key="bulk_close_btn"
+            ):
+                for o in selected_to_close:
+                    if o in orders:
+                        orders.remove(o)
+                save_orders(orders)
+                st.success(f"✅ {len(selected_to_close)} position(s) closed.")
+                st.rerun()
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # ==========================================
     # POSITION CARDS LOOP
