@@ -600,6 +600,9 @@ def dialog_bulk_close(orders, filtered):
     if "bulk_select_all" not in st.session_state:
         st.session_state["bulk_select_all"] = False
 
+    version = st.session_state["bulk_close_version"]
+    default_checked = st.session_state["bulk_select_all"]
+
     # Select All / Deselect All
     sa1, sa2, _ = st.columns([2, 2, 5])
     with sa1:
@@ -613,35 +616,28 @@ def dialog_bulk_close(orders, filtered):
             st.session_state["bulk_close_version"] += 1
             st.rerun()
 
-    st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
-
-    version = st.session_state["bulk_close_version"]
-    default_checked = st.session_state["bulk_select_all"]
+    st.markdown("<div style='margin-top:4px'></div>", unsafe_allow_html=True)
 
     selected_to_close = []
     for i, (o, c) in enumerate(filtered):
         sym = o.get("symbol", "BTC")
         side_label = "BUY" if o["side"] == "Buy" else "SELL"
-        pnl_color = "#00e676" if c["running_inr"] >= 0 else "#ff1744"
+        pnl_color = "#00c853" if c["running_inr"] >= 0 else "#ff1744"
+        pnl_sign = "+" if c["running_inr"] >= 0 else ""
+        exchange = ACCOUNT_GROUP.get(o["account"], "?")
+        lots = qty_to_lots(o.get("qty", 0) or 0, sym)
 
-        col_chk, col_lbl = st.columns([1, 12])
-        with col_chk:
-            checked = st.checkbox(
-                "",
-                value=default_checked,
-                key=f"bulk_chk_{version}_{i}",
-                label_visibility="collapsed"
-            )
-        with col_lbl:
-            st.markdown(
-                f"<span style='font-family:monospace'>"
-                f"<b>{o['account']}</b> [{sym}] {side_label} "
-                f"@ ${o.get('entry_price', 0):,.2f} | "
-                f"{qty_to_lots(o.get('qty', 0) or 0, sym)} lots → "
-                f"<span style='color:{pnl_color}'>{fmt_inr(c['running_inr'])}</span>"
-                f"</span>",
-                unsafe_allow_html=True
-            )
+        label = (
+            f"{o['account']} ({exchange}) · {sym} · {side_label} · "
+            f"${o.get('entry_price', 0):,.2f} · {lots} lots · "
+            f"₹{pnl_sign}{c['running_inr']:,.0f}"
+        )
+
+        checked = st.checkbox(
+            label,
+            value=default_checked,
+            key=f"bulk_chk_{version}_{i}",
+        )
         if checked:
             selected_to_close.append(o)
 
@@ -664,7 +660,7 @@ def dialog_bulk_close(orders, filtered):
             st.success(f"✅ {len(selected_to_close)} position(s) closed.")
             st.rerun()
     else:
-        st.info("No positions selected.")
+        st.info("No positions selected. Check positions above to close them.")
 
 # ==========================================
 # TELEGRAM COMMAND LISTENER FRAGMENT
