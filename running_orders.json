@@ -48,7 +48,7 @@
     "alert_threshold": 3.0
   },
   {
-    "account": "A-1",
+    "account": "A-5",
     "symbol": "BTC",
     "side": "Sell",
     "entry_price": 62002.0,
