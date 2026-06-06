@@ -1,17 +1,5 @@
 [
   {
-    "account": "A-3",
-    "symbol": "ETH",
-    "side": "Buy",
-    "entry_price": 2267.55,
-    "qty": 0.08,
-    "liquidation": null,
-    "target": null,
-    "stop_loss": null,
-    "added_at": "2026-06-03 06:39:51.667128",
-    "alert_threshold": 3.0
-  },
-  {
     "account": "A-5",
     "symbol": "ETH",
     "side": "Buy",
