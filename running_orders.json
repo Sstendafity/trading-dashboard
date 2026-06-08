@@ -157,10 +157,10 @@
   },
   {
     "account": "A-3",
-    "symbol": "BTC",
+    "symbol": "ETH",
     "side": "Buy",
     "entry_price": 2267.55,
-    "qty": 0.008,
+    "qty": 0.08,
     "liquidation": null,
     "target": null,
     "stop_loss": null,
