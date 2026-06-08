@@ -12,7 +12,7 @@
     "alert_threshold": 3.0
   },
   {
-    "account": "A-1",
+    "account": "A-2",
     "symbol": "BTC",
     "side": "Buy",
     "entry_price": 81535.0,
