@@ -27,7 +27,7 @@
     "account": "A-3",
     "symbol": "BTC",
     "side": "Sell",
-    "entry_price": 63208.5,
+    "entry_price": 62032.0,
     "qty": 0.002,
     "liquidation": null,
     "target": null,
