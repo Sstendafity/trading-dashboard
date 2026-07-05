@@ -1385,7 +1385,9 @@ def live_dashboard(orders):
         # Opposite if BTC has Buy and ETH has Sell, or BTC has Sell and ETH has Buy
         is_hedge = (
             ("Buy" in btc_sides and "Sell" in eth_sides) or
-            ("Sell" in btc_sides and "Buy" in eth_sides)
+            ("Sell" in btc_sides and "Buy" in eth_sides) or 
+            ("Buy" in btc_sides and "Buy" in eth_sides) or 
+            ("Sell" in btc_sides and "Sell" in eth_sides)
         )
         if is_hedge:
             hedge_accounts.append(acc)
