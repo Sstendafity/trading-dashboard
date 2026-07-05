@@ -1242,7 +1242,7 @@ def live_dashboard(orders):
         sell_count = btc_to_lots(btc_sq) + qty_to_lots(eth_sq, 'ETH')
         st.markdown(summary_box(
             "Overall Buy/Sell Qty",
-            f"Buy: {buy_count}L<br><small style='font-size:12px'>Sell: {sell_count}L</small>"
+            f"Buy: {buy_count}L<br><small style='font-size:12px'>Sell: {sell_count}L</small style='font-size:12px'>"
         ), unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
