@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "account": "A-1",
+    "symbol": "BTC",
+    "side": "Buy",
+    "entry_price": 81526.5,
+    "qty": 0.007,
+    "liquidation": 59659.5,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-07-05 04:40:11.324105",
+    "alert_threshold": 3.0
+  }
+]
