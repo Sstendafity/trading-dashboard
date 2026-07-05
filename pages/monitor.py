@@ -1238,11 +1238,11 @@ def live_dashboard(orders):
     with r1c4:
         st.markdown(summary_box("Total Positions", len(orders)), unsafe_allow_html=True)
     with r1c5:
-        btc_count = sum(1 for o in orders if o.get("symbol", "BTC") == "BTC")
-        eth_count = sum(1 for o in orders if o.get("symbol") == "ETH")
+        buy_count = btc_to_lots(btc_bq) + qty_to_lots(eth_bq, 'ETH')
+        sell_count = btc_to_lots(btc_sq) + qty_to_lots(eth_sq, 'ETH')
         st.markdown(summary_box(
-            "By Symbol",
-            f"BTC: {btc_count}<br><small style='font-size:12px'>ETH: {eth_count}</small>"
+            "Overall Buy/Sell Qty",
+            f"Buy: {buy_count}L<br><small style='font-size:12px'>Sell: {sell_count}L</small>"
         ), unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
