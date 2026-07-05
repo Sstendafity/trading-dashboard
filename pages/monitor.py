@@ -1418,11 +1418,13 @@ def live_dashboard(orders):
             # Build position lines for BTC
             btc_lines = []
             for o, c in btc_pairs:
+                arrow_color = "#00c853" if o["side"] == "Buy" else "#ff1744"
                 side_arrow = "↑" if o["side"] == "Buy" else "↓"
                 lots = qty_to_lots(o.get("qty", 0) or 0, "BTC")
                 pnl_s = "+" if c["running_inr"] >= 0 else ""
                 btc_lines.append(
-                    f"{side_arrow} ${o.get('entry_price',0):,.1f} · {lots}L · "
+                    f"<span style='color:{arrow_color};font-weight:700'>{side_arrow}</span> "
+                    f"${o.get('entry_price',0):,.1f} · {lots}L · "
                     f"<span style='color:{'#00e676' if c['running_inr']>=0 else '#ff1744'}'>"
                     f"₹{pnl_s}{c['running_inr']:,.0f}</span>"
                 )
@@ -1430,11 +1432,13 @@ def live_dashboard(orders):
             # Build position lines for ETH
             eth_lines = []
             for o, c in eth_pairs:
+                arrow_color = "#00c853" if o["side"] == "Buy" else "#ff1744"
                 side_arrow = "↑" if o["side"] == "Buy" else "↓"
                 lots = qty_to_lots(o.get("qty", 0) or 0, "ETH")
                 pnl_s = "+" if c["running_inr"] >= 0 else ""
                 eth_lines.append(
-                    f"{side_arrow} ${o.get('entry_price',0):,.1f} · {lots}L · "
+                    f"<span style='color:{arrow_color};font-weight:700'>{side_arrow}</span> "
+                    f"${o.get('entry_price',0):,.1f} · {lots}L · "
                     f"<span style='color:{'#00e676' if c['running_inr']>=0 else '#ff1744'}'>"
                     f"₹{pnl_s}{c['running_inr']:,.0f}</span>"
                 )
