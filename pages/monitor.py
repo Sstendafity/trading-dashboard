@@ -1640,12 +1640,12 @@ if orders:
                     <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px">
                         <div style="font-size:10px;color:#888;text-transform:uppercase;
                                     letter-spacing:1px;margin-bottom:8px">Running P&L</div>
-                        <div style="text-align:center;padding:8px 0">
-                            <div style="font-size:28px;font-weight:800;font-family:monospace;
+                        <div style="text-align:center;padding:2px 0">
+                            <div style="font-size:18px;font-weight:800;font-family:monospace;
                                         color:{pnl_color};line-height:1.1">
                                 {fmt_inr(c['running_inr'])}
                             </div>
-                            <div style="font-size:13px;color:#888;margin-top:4px;font-family:monospace">
+                            <div style="font-size:12px;color:#888;margin-top:4px;font-family:monospace">
                                 {fmt_usd(c['running_usd'])}
                             </div>
                         </div>
