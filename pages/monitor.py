@@ -1450,7 +1450,7 @@ def live_dashboard(orders):
                     </div>
                     <div style="text-align:right">
                         <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px">Net Combined P&L</div>
-                        <div style="font-size:20px;font-weight:800;font-family:monospace;color:{net_color}">
+                        <div style="font-size:16px;font-weight:800;font-family:monospace;color:{net_color}">
                             ₹{net_sign}{net_inr:,.0f}
                         </div>
                         <div style="font-size:11px;color:#888">${net_sign}{net_usd:,.2f}</div>
@@ -1459,20 +1459,20 @@ def live_dashboard(orders):
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                     <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px">
                         <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">₿ BTC</div>
-                        <div style="font-size:13px;font-family:monospace;margin-bottom:6px">
+                        <div style="font-size:12px;font-family:monospace;margin-bottom:6px">
                             {'<br>'.join(btc_lines)}
                         </div>
-                        <div style="font-size:13px;font-weight:700;color:{btc_color};font-family:monospace;border-top:1px solid rgba(128,128,128,0.15);padding-top:6px;margin-top:4px">
-                            Total: ₹{btc_sign}{btc_inr:,.0f}
+                        <div style="font-size:12px;font-weight:700;color:{btc_color};font-family:monospace;border-top:1px solid rgba(128,128,128,0.15);padding-top:6px;margin-top:4px">
+                            Total: ${btc_sign}{btc_usd:,.0f}
                         </div>
                     </div>
                     <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px">
                         <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Ξ ETH</div>
-                        <div style="font-size:13px;font-family:monospace;margin-bottom:6px">
+                        <div style="font-size:12px;font-family:monospace;margin-bottom:6px">
                             {'<br>'.join(eth_lines)}
                         </div>
-                        <div style="font-size:13px;font-weight:700;color:{eth_color};font-family:monospace;border-top:1px solid rgba(128,128,128,0.15);padding-top:6px;margin-top:4px">
-                            Total: ₹{eth_sign}{eth_inr:,.0f}
+                        <div style="font-size:12px;font-weight:700;color:{eth_color};font-family:monospace;border-top:1px solid rgba(128,128,128,0.15);padding-top:6px;margin-top:4px">
+                            Total: ${eth_sign}{eth_usd:,.0f}
                         </div>
                     </div>
                 </div>
