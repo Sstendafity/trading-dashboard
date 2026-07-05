@@ -1358,7 +1358,127 @@ def live_dashboard(orders):
         return df.style.map(color_cells, subset=["Run P&L (USD)", "Run P&L (INR)", "Profit (INR)", "Loss (INR)", "Liq Loss (INR)"])
 
     st.dataframe(style_table(table_df), use_container_width=True, hide_index=True)
-    st.markdown("---")
+    
+    # ==========================================
+    # CROSS-PAIR HEDGE ANALYSIS
+    # Shows accounts with opposite BTC/ETH positions
+    # ==========================================
+
+    # Build per-account position map
+    account_positions = {}
+    for o, c in zip(orders, calcs):
+        acc = o["account"]
+        sym = o.get("symbol", "BTC")
+        if acc not in account_positions:
+            account_positions[acc] = {}
+        if sym not in account_positions[acc]:
+            account_positions[acc][sym] = []
+        account_positions[acc][sym].append((o, c))
+
+    # Find accounts with BTC+ETH and opposite sides
+    hedge_accounts = []
+    for acc, syms in account_positions.items():
+        if "BTC" not in syms or "ETH" not in syms:
+            continue
+        btc_sides = {o["side"] for o, _ in syms["BTC"]}
+        eth_sides = {o["side"] for o, _ in syms["ETH"]}
+        # Opposite if BTC has Buy and ETH has Sell, or BTC has Sell and ETH has Buy
+        is_hedge = (
+            ("Buy" in btc_sides and "Sell" in eth_sides) or
+            ("Sell" in btc_sides and "Buy" in eth_sides)
+        )
+        if is_hedge:
+            hedge_accounts.append(acc)
+
+    if hedge_accounts:
+        st.markdown("### 🔀 Cross-Pair Hedge")
+        st.caption("Accounts with opposite BTC/ETH positions — combined running P&L.")
+
+        for acc in sorted(hedge_accounts):
+            btc_pairs = account_positions[acc]["BTC"]
+            eth_pairs = account_positions[acc]["ETH"]
+            exchange = ACCOUNT_GROUP.get(acc, "?")
+
+            btc_inr = sum(c["running_inr"] for _, c in btc_pairs)
+            btc_usd = sum(c["running_usd"] for _, c in btc_pairs)
+            eth_inr = sum(c["running_inr"] for _, c in eth_pairs)
+            eth_usd = sum(c["running_usd"] for _, c in eth_pairs)
+            net_inr = btc_inr + eth_inr
+            net_usd = btc_usd + eth_usd
+
+            net_color = "#00e676" if net_inr >= 0 else "#ff1744"
+            btc_color = "#00e676" if btc_inr >= 0 else "#ff1744"
+            eth_color = "#00e676" if eth_inr >= 0 else "#ff1744"
+            net_sign = "+" if net_inr >= 0 else ""
+            btc_sign = "+" if btc_inr >= 0 else ""
+            eth_sign = "+" if eth_inr >= 0 else ""
+
+            # Build position lines for BTC
+            btc_lines = []
+            for o, c in btc_pairs:
+                side_arrow = "↑" if o["side"] == "Buy" else "↓"
+                lots = qty_to_lots(o.get("qty", 0) or 0, "BTC")
+                pnl_s = "+" if c["running_inr"] >= 0 else ""
+                btc_lines.append(
+                    f"{side_arrow} ${o.get('entry_price',0):,.1f} · {lots}L · "
+                    f"<span style='color:{'#00e676' if c['running_inr']>=0 else '#ff1744'}'>"
+                    f"₹{pnl_s}{c['running_inr']:,.0f}</span>"
+                )
+
+            # Build position lines for ETH
+            eth_lines = []
+            for o, c in eth_pairs:
+                side_arrow = "↑" if o["side"] == "Buy" else "↓"
+                lots = qty_to_lots(o.get("qty", 0) or 0, "ETH")
+                pnl_s = "+" if c["running_inr"] >= 0 else ""
+                eth_lines.append(
+                    f"{side_arrow} ${o.get('entry_price',0):,.1f} · {lots}L · "
+                    f"<span style='color:{'#00e676' if c['running_inr']>=0 else '#ff1744'}'>"
+                    f"₹{pnl_s}{c['running_inr']:,.0f}</span>"
+                )
+
+            st.markdown(f"""
+            <div style="background:var(--secondary-background-color);
+                        border:1px solid rgba(128,128,128,0.2);
+                        border-radius:12px;padding:16px;margin-bottom:10px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                    <div>
+                        <span style="font-size:16px;font-weight:700">{acc}</span>
+                        <span style="font-size:12px;color:#888;margin-left:8px">{exchange}</span>
+                    </div>
+                    <div style="text-align:right">
+                        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px">Net Combined P&L</div>
+                        <div style="font-size:20px;font-weight:800;font-family:monospace;color:{net_color}">
+                            ₹{net_sign}{net_inr:,.0f}
+                        </div>
+                        <div style="font-size:11px;color:#888">${net_sign}{net_usd:,.2f}</div>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px">
+                        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">₿ BTC</div>
+                        <div style="font-size:13px;font-family:monospace;margin-bottom:6px">
+                            {'<br>'.join(btc_lines)}
+                        </div>
+                        <div style="font-size:13px;font-weight:700;color:{btc_color};font-family:monospace;border-top:1px solid rgba(128,128,128,0.15);padding-top:6px;margin-top:4px">
+                            Total: ₹{btc_sign}{btc_inr:,.0f}
+                        </div>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px">
+                        <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Ξ ETH</div>
+                        <div style="font-size:13px;font-family:monospace;margin-bottom:6px">
+                            {'<br>'.join(eth_lines)}
+                        </div>
+                        <div style="font-size:13px;font-weight:700;color:{eth_color};font-family:monospace;border-top:1px solid rgba(128,128,128,0.15);padding-top:6px;margin-top:4px">
+                            Total: ₹{eth_sign}{eth_inr:,.0f}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("---")
+    # st.markdown("---")
 
     st.session_state["current_cp"] = cp
     st.session_state["current_eth_cp"] = eth_cp
