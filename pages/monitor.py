@@ -1526,6 +1526,7 @@ st.markdown("---")
 if orders:
     st.markdown("### 🗂️ Position Cards")
 
+    # Filters row
     filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
     with filter_col1:
         filter_sym = st.selectbox("Filter Symbol", ["All", "BTC", "ETH"])
@@ -1550,80 +1551,207 @@ if orders:
 
     if not filtered:
         st.info("No positions match the filter.")
+    else:
+        # ---- Expand / Collapse All ----
+        if "cards_expanded" not in st.session_state:
+            st.session_state["cards_expanded"] = False
 
-    if orders and filtered:
-        if st.button("🗑️ Bulk Close Positions"):
+        ea1, ea2, _ = st.columns([2, 2, 5])
+        with ea1:
+            if st.button("📂 Expand All", use_container_width=True):
+                st.session_state["cards_expanded"] = True
+                st.rerun()
+        with ea2:
+            if st.button("📁 Collapse All", use_container_width=True):
+                st.session_state["cards_expanded"] = False
+                st.rerun()
+
+        # ---- Bulk Close Dialog ----
+        if "bulk_close_version" not in st.session_state:
+            st.session_state["bulk_close_version"] = 0
+
+        if st.button("🗑️ Bulk Close Positions", use_container_width=False):
             dialog_bulk_close(orders, filtered)
 
-    # ==========================================
-    # POSITION CARDS LOOP
-    # ==========================================
+        st.markdown("<div style='margin-top:4px'></div>", unsafe_allow_html=True)
 
-    for i, (o, c) in enumerate(filtered):
-        sym = o.get("symbol", "BTC")
-        side_label = "BUY / LONG" if o["side"] == "Buy" else "SELL / SHORT"
-        danger_pct = c["danger_pct"] or 0
-        card_cp = get_card_cp(o)
+        cards_expanded = st.session_state["cards_expanded"]
 
-        with st.expander(
-            f"{o['account']} [{sym}] ({ACCOUNT_GROUP.get(o['account'], '?')}) — {side_label} — "
-            f"Running: {fmt_inr(c['running_inr'])}",
-            expanded=False
-        ):
-            c1, c2, c3, c4 = st.columns(4)
+        # ---- Position Cards Loop ----
+        for i, (o, c) in enumerate(filtered):
+            sym = o.get("symbol", "BTC")
+            side_label = "BUY / LONG" if o["side"] == "Buy" else "SELL / SHORT"
+            danger_pct = c["danger_pct"] or 0
+            card_cp = get_card_cp(o)
+            liq = o.get("liquidation")
+            tg = o.get("target")
+            sl = o.get("stop_loss")
 
-            with c1:
-                st.markdown(f'<div class="stat-label">Symbol</div><div class="stat-value">{sym}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="stat-label">Entry Price</div><div class="stat-value">${o.get("entry_price", 0):,.2f}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="stat-label">Quantity</div><div class="stat-value">{fmt_lots(o.get("qty", 0) or 0, sym)}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="stat-label">EP × CP Diff</div><div class="stat-value" style="{color_val(c["ep_cp_diff"])}">{fmt_price(c["ep_cp_diff"])}</div>', unsafe_allow_html=True)
+            # Auto-expand if danger >= 70%
+            should_expand = cards_expanded or danger_pct >= 70
 
-            with c2:
-                st.markdown(f'<div class="stat-label">Current Price</div><div class="stat-value">${card_cp:,.2f}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="stat-label">Running P&L (USD)</div><div class="stat-value" style="{color_val(c["running_usd"])}">{fmt_usd(c["running_usd"])}</div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="stat-label">Running P&L (INR)</div><div class="stat-value" style="{color_val(c["running_inr"])}">{fmt_inr(c["running_inr"])}</div>', unsafe_allow_html=True)
+            with st.expander(
+                f"{o['account']} [{sym}] ({ACCOUNT_GROUP.get(o['account'], '?')}) "
+                f"— {side_label} — Running: {fmt_inr(c['running_inr'])}",
+                expanded=should_expand
+            ):
+                # ---- Row 1: Position Info + P&L (2 columns) ----
+                r1_left, r1_right = st.columns(2)
 
-            with c3:
-                liq = o.get("liquidation")
-                if liq:
-                    st.markdown(f'<div class="stat-label">Liquidation Price</div><div class="stat-value" style="color:#ff6b6b">${liq:,.2f}</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="stat-label">CP × Liq Distance</div><div class="stat-value">${abs(c["liq_danger"]):,.2f}</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="stat-label">Liq Loss (INR)</div><div class="stat-value" style="color:#ff1744">{fmt_inr(c["liq_loss_inr"])}</div>', unsafe_allow_html=True)
-                    bar_pct = min(danger_pct, 100)
-                    bar_color = "#ff1744" if bar_pct >= 70 else ("#ffa726" if bar_pct >= 40 else "#00e676")
+                with r1_left:
                     st.markdown(f"""
-                    <div style="margin-top:8px">
-                        <div class="stat-label">Liquidation Risk</div>
-                        <div style="background:#2a2a4a;border-radius:4px;height:8px;overflow:hidden">
-                            <div style="width:{bar_pct}%;background:{bar_color};height:100%;border-radius:4px;transition:width 0.3s"></div>
+                    <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px">
+                        <div style="font-size:10px;color:#888;text-transform:uppercase;
+                                    letter-spacing:1px;margin-bottom:8px">Position</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                            <div>
+                                <div class="stat-label">Symbol</div>
+                                <div class="stat-value">{sym}</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Side</div>
+                                <div class="stat-value" style="color:{'#00c853' if o['side']=='Buy' else '#ff1744'}">
+                                    {'▲ LONG' if o['side']=='Buy' else '▼ SHORT'}
+                                </div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Entry Price</div>
+                                <div class="stat-value">${o.get('entry_price', 0):,.2f}</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Quantity</div>
+                                <div class="stat-value">{fmt_lots(o.get('qty', 0) or 0, sym)}</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">Current Price</div>
+                                <div class="stat-value">${card_cp:,.2f}</div>
+                            </div>
+                            <div>
+                                <div class="stat-label">EP × CP Diff</div>
+                                <div class="stat-value" style="{color_val(c['ep_cp_diff'])}">{fmt_price(c['ep_cp_diff'])}</div>
+                            </div>
                         </div>
-                        <div style="font-size:11px;color:{bar_color};margin-top:3px">{bar_pct:.0f}% toward liquidation</div>
                     </div>
                     """, unsafe_allow_html=True)
-                else:
-                    st.markdown('<div class="stat-label">Liquidation</div><div class="stat-value" style="color:#888">Not set</div>', unsafe_allow_html=True)
 
-            with c4:
-                tg = o.get("target")
-                sl = o.get("stop_loss")
-                if tg:
-                    st.markdown(f'<div class="stat-label">Target (TG)</div><div class="stat-value" style="color:#69f0ae">${tg:,.2f}</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="stat-label">Profit at TG (INR)</div><div class="stat-value" style="color:#00e676">{fmt_inr(c["profit_inr"])}</div>', unsafe_allow_html=True)
-                if sl:
-                    st.markdown(f'<div class="stat-label">Stop Loss (SL)</div><div class="stat-value" style="color:#ffa726">${sl:,.2f}</div>', unsafe_allow_html=True)
-                    st.markdown(f'<div class="stat-label">Loss at SL (INR)</div><div class="stat-value" style="color:#ff1744">{fmt_inr(c["loss_inr"])}</div>', unsafe_allow_html=True)
+                with r1_right:
+                    pnl_color = "#00e676" if c["running_inr"] >= 0 else "#ff1744"
+                    st.markdown(f"""
+                    <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px">
+                        <div style="font-size:10px;color:#888;text-transform:uppercase;
+                                    letter-spacing:1px;margin-bottom:8px">Running P&L</div>
+                        <div style="text-align:center;padding:8px 0">
+                            <div style="font-size:28px;font-weight:800;font-family:monospace;
+                                        color:{pnl_color};line-height:1.1">
+                                {fmt_inr(c['running_inr'])}
+                            </div>
+                            <div style="font-size:13px;color:#888;margin-top:4px;font-family:monospace">
+                                {fmt_usd(c['running_usd'])}
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-            btn1, btn2, _ = st.columns([2, 2, 5])
-            with btn1:
-                if st.button("✏️ Edit", key=f"edit_{i}"):
-                    dialog_edit_position(orders, orders.index(o))
-            with btn2:
-                if st.button("🗑️ Close Position", key=f"del_{i}"):
-                    orders.remove(o)
-                    save_orders(orders)
-                    st.success(f"Position {o['account']} [{sym}] removed.")
-                    st.rerun()
+                st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
+
+                # ---- Row 2: Liquidation + TG/SL (2 columns) ----
+                r2_left, r2_right = st.columns(2)
+
+                with r2_left:
+                    if liq:
+                        bar_pct = min(danger_pct, 100)
+                        bar_color = "#ff1744" if bar_pct >= 70 else ("#ffa726" if bar_pct >= 40 else "#00e676")
+                        st.markdown(f"""
+                        <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px">
+                            <div style="font-size:10px;color:#888;text-transform:uppercase;
+                                        letter-spacing:1px;margin-bottom:8px">Liquidation</div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+                                <div>
+                                    <div class="stat-label">Liq Price</div>
+                                    <div class="stat-value" style="color:#ff6b6b">${liq:,.2f}</div>
+                                </div>
+                                <div>
+                                    <div class="stat-label">Distance</div>
+                                    <div class="stat-value">${abs(c['liq_danger']):,.2f}</div>
+                                </div>
+                                <div>
+                                    <div class="stat-label">Liq Loss (INR)</div>
+                                    <div class="stat-value" style="color:#ff1744">{fmt_inr(c['liq_loss_inr'])}</div>
+                                </div>
+                            </div>
+                            <div class="stat-label">Risk — {bar_pct:.0f}% toward liquidation</div>
+                            <div style="background:#2a2a4a;border-radius:4px;height:8px;
+                                        overflow:hidden;margin-top:4px">
+                                <div style="width:{bar_pct}%;background:{bar_color};
+                                            height:100%;border-radius:4px"></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown("""
+                        <div style="background:rgba(255,255,255,0.03);border-radius:8px;
+                                    padding:12px;text-align:center">
+                            <div class="stat-label">Liquidation</div>
+                            <div class="stat-value" style="color:#555">Not set</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                with r2_right:
+                    tg_block = ""
+                    sl_block = ""
+                    if tg:
+                        tg_block = f"""
+                        <div>
+                            <div class="stat-label">Target (TG)</div>
+                            <div class="stat-value" style="color:#69f0ae">${tg:,.2f}</div>
+                        </div>
+                        <div>
+                            <div class="stat-label">Profit at TG</div>
+                            <div class="stat-value" style="color:#00e676">{fmt_inr(c['profit_inr'])}</div>
+                        </div>
+                        """
+                    if sl:
+                        sl_block = f"""
+                        <div>
+                            <div class="stat-label">Stop Loss (SL)</div>
+                            <div class="stat-value" style="color:#ffa726">${sl:,.2f}</div>
+                        </div>
+                        <div>
+                            <div class="stat-label">Loss at SL</div>
+                            <div class="stat-value" style="color:#ff1744">{fmt_inr(c['loss_inr'])}</div>
+                        </div>
+                        """
+                    if tg or sl:
+                        st.markdown(f"""
+                        <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px">
+                            <div style="font-size:10px;color:#888;text-transform:uppercase;
+                                        letter-spacing:1px;margin-bottom:8px">Targets</div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                                {tg_block}{sl_block}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown("""
+                        <div style="background:rgba(255,255,255,0.03);border-radius:8px;
+                                    padding:12px;text-align:center">
+                            <div class="stat-label">TG / SL</div>
+                            <div class="stat-value" style="color:#555">Not set</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                # ---- Action Buttons ----
+                st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
+                btn1, btn2, _ = st.columns([2, 2, 5])
+                with btn1:
+                    if st.button("✏️ Edit", key=f"edit_{i}", use_container_width=True):
+                        dialog_edit_position(orders, orders.index(o))
+                with btn2:
+                    if st.button("🗑️ Close", key=f"del_{i}", use_container_width=True):
+                        orders.remove(o)
+                        save_orders(orders)
+                        st.success(f"Position {o['account']} [{sym}] removed.")
+                        st.rerun()
 
 # ==========================================
 # PROJECTION FEATURE
