@@ -136,7 +136,7 @@
     "symbol": "BTC",
     "side": "Buy",
     "entry_price": 63884.8,
-    "qty": 0.01,
+    "qty": 0.002,
     "liquidation": 54656.2,
     "target": null,
     "stop_loss": null,
