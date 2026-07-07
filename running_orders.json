@@ -5,7 +5,7 @@
     "side": "Buy",
     "entry_price": 81526.5,
     "qty": 0.007,
-    "liquidation": 55400.0,
+    "liquidation": 55418.0,
     "target": null,
     "stop_loss": null,
     "added_at": "2026-07-05 04:40:11.324105",
@@ -195,8 +195,8 @@
     "account": "A-6",
     "symbol": "ETH",
     "side": "Buy",
-    "entry_price": 1787.83,
-    "qty": 0.5900000000000001,
+    "entry_price": 1788.26,
+    "qty": 0.6100000000000001,
     "liquidation": null,
     "target": null,
     "stop_loss": null,
@@ -214,5 +214,17 @@
     "stop_loss": null,
     "added_at": "2026-07-06 17:50:33.504925",
     "alert_threshold": 3.0
+  },
+  {
+    "account": "A-6",
+    "symbol": "BTC",
+    "side": "Buy",
+    "entry_price": 70000.0,
+    "qty": 0.001,
+    "liquidation": null,
+    "target": null,
+    "stop_loss": null,
+    "alert_threshold": 3.0,
+    "added_at": "2026-07-07 16:09:07.539036"
   }
 ]
