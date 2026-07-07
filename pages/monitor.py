@@ -925,7 +925,7 @@ def dialog_edit_pre_order(pre_orders, idx, orders):
             save_pre_orders(pre_orders)
             st.success("✅ Pre-order updated.")
             st.rerun()
-            
+
 @st.dialog("🗑️ Bulk Close Positions", width="large")
 def dialog_bulk_close(orders, filtered):
     if "bulk_close_version" not in st.session_state:
@@ -1403,7 +1403,7 @@ def live_dashboard(orders):
 
             save_orders(orders)
             save_stop_orders(so_remaining)
-            st.rerun(scope="fragment")
+            st.rerun()
 
     # ==========================================
     # PRE-ORDER TRIGGER CHECK (fixed / pyramid)
@@ -1514,7 +1514,7 @@ def live_dashboard(orders):
 
             save_orders(orders)
             save_pre_orders(po_remaining)
-            st.rerun(scope="fragment")
+            st.rerun()
 
     # ==========================================
     # PRICE BAR — BTC and ETH side by side
