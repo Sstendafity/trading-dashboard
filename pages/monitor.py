@@ -1422,7 +1422,7 @@ def live_dashboard(orders):
                 po_remaining.append(po)
                 continue
 
-            hit = (side == "Buy" and price <= target) or (side == "Sell" and price >= target)
+            hit = (side == "Buy" and price >= target) or (side == "Sell" and price <= target)
 
             if hit:
                 po_triggered.append(po)
