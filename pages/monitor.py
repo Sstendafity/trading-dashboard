@@ -772,7 +772,7 @@ def dialog_add_pre_order(pre_orders, orders):
     with f2:
         target_entry = st.number_input(
             "Target Entry Price (USD)", min_value=0.0, value=0.0, step=0.1, key="pre_entry",
-            help="Buy: triggers when CP ≤ this price. Sell: triggers when CP ≥ this price."
+            help="Buy: triggers when CP ≥ this price. Sell: triggers when CP ≤ this price."
         )
         ls = get_lot_size(symbol)
         lot_qty = st.number_input("Quantity (Lots)", min_value=1, value=1,
