@@ -135,7 +135,7 @@
     "account": "A-9",
     "symbol": "BTC",
     "side": "Buy",
-    "entry_price": 63884.8,
+    "entry_price": 64192.4,
     "qty": 0.002,
     "liquidation": 54656.2,
     "target": null,
