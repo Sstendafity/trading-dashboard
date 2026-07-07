@@ -1215,8 +1215,7 @@ def live_dashboard(orders):
                 for idx, o in enumerate(orders):
                     if (o["account"] == so["target_account"] and
                         o.get("symbol", "BTC") == sym and
-                        o["side"] == so["target_side"] and
-                        abs(o.get("entry_price", 0) - so["target_entry_price"]) < 0.01):
+                        o["side"] == so["target_side"]):
                         match_idx = idx
                         break
 
