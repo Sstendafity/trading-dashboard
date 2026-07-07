@@ -710,6 +710,53 @@ def dialog_add_stop_order(orders, stop_orders):
             st.success(f"✅ Stop-order added — closes {partial_lots} lots @ ${trigger_price:,.2f}")
             st.rerun()
 
+@st.dialog("✏️ Edit Stop-Order", width="large")
+def dialog_edit_stop_order(stop_orders, idx, orders):
+    default = stop_orders[idx]
+    sym = default.get("target_symbol", "BTC")
+    current_lots_max = 999
+    for o in orders:
+        if (o["account"] == default["target_account"] and
+            o.get("symbol", "BTC") == sym and
+            o["side"] == default["target_side"]):
+            current_lots_max = qty_to_lots(o.get("qty", 0) or 0, sym)
+            break
+
+    st.caption(f"Attached to: {default['target_account']} [{sym}] {default['target_side']}")
+
+    f1, f2 = st.columns(2)
+    with f1:
+        direction = st.selectbox(
+            "Trigger When Price",
+            ["Drops to or below", "Rises to or above"],
+            index=0 if default.get("trigger_direction") == "at_or_below" else 1,
+            key="so_edit_direction"
+        )
+        trigger_price = st.number_input(
+            "Trigger Price (USD)", min_value=0.0,
+            value=float(default.get("trigger_price", 0)), step=0.1, key="so_edit_price"
+        )
+    with f2:
+        ls = get_lot_size(sym)
+        current_lots = qty_to_lots(default.get("qty", 0) or 0, sym)
+        partial_lots = st.number_input(
+            "Partial Close Quantity (Lots)",
+            min_value=1, max_value=max(1, current_lots_max), value=current_lots,
+            step=1, key="so_edit_qty"
+        )
+        st.caption(f"= {partial_lots * ls:.4f} {sym}")
+
+    if st.button("💾 Update Stop-Order", use_container_width=True):
+        if trigger_price <= 0:
+            st.error("Trigger price is required.")
+        else:
+            stop_orders[idx]["trigger_direction"] = "at_or_below" if direction == "Drops to or below" else "at_or_above"
+            stop_orders[idx]["trigger_price"] = trigger_price
+            stop_orders[idx]["qty"] = partial_lots * ls
+            save_stop_orders(stop_orders)
+            st.success("✅ Stop-order updated.")
+            st.rerun()
+
 @st.dialog("⏳ Add Pre-Order", width="large")
 def dialog_add_pre_order(pre_orders, orders):
     st.caption(
@@ -794,6 +841,91 @@ def dialog_add_pre_order(pre_orders, orders):
             st.success(f"✅ Pre-order added — {acc} [{symbol}] {side} @ ${target_entry:,.2f}")
             st.rerun()
 
+@st.dialog("✏️ Edit Pre-Order", width="large")
+def dialog_edit_pre_order(pre_orders, idx, orders):
+    default = pre_orders[idx]
+    default_sym = default.get("symbol", "BTC")
+
+    f1, f2, f3 = st.columns(3)
+    with f1:
+        acc = st.selectbox("Account", ACCOUNTS,
+                           index=ACCOUNTS.index(default.get("account", "A-1")) if default.get("account") in ACCOUNTS else 0,
+                           key="pre_edit_acc")
+        symbol = st.selectbox("Symbol", SYMBOLS,
+                              index=SYMBOLS.index(default_sym) if default_sym in SYMBOLS else 0,
+                              key="pre_edit_symbol")
+        side = st.selectbox("Side", ["Buy", "Sell"],
+                            index=0 if default.get("side", "Buy") == "Buy" else 1,
+                            key="pre_edit_side")
+    with f2:
+        target_entry = st.number_input(
+            "Target Entry Price (USD)", min_value=0.0,
+            value=float(default.get("target_entry_price", 0)), step=0.1, key="pre_edit_entry"
+        )
+        ls = get_lot_size(symbol)
+        default_lots = qty_to_lots(default.get("qty", 0) or 0, symbol)
+        lot_qty = st.number_input("Quantity (Lots)", min_value=1, value=max(1, default_lots),
+                                  step=1, key="pre_edit_qty")
+        st.caption(f"= {lot_qty * ls:.4f} {symbol}")
+        threshold = st.number_input("Alert Threshold (%)", min_value=0.5, max_value=20.0,
+                                    value=float(default.get("alert_threshold", 3.0)),
+                                    step=0.5, key="pre_edit_threshold")
+    with f3:
+        liq_default = default.get("liquidation")
+        liq_input = st.number_input("Liquidation Price (optional)", min_value=0.0,
+                                    value=float(liq_default) if liq_default else 0.0,
+                                    step=0.1, key="pre_edit_liq")
+        liq_val = liq_input if liq_input > 0 else None
+
+    f4, f5 = st.columns(2)
+    with f4:
+        tg_default = default.get("target")
+        tg_input = st.number_input("Target / TG (optional)", min_value=0.0,
+                                   value=float(tg_default) if tg_default else 0.0,
+                                   step=0.1, key="pre_edit_tg")
+        tg_val = tg_input if tg_input > 0 else None
+    with f5:
+        sl_default = default.get("stop_loss")
+        sl_input = st.number_input("Stop Loss / SL (optional)", min_value=0.0,
+                                   value=float(sl_default) if sl_default else 0.0,
+                                   step=0.1, key="pre_edit_sl")
+        sl_val = sl_input if sl_input > 0 else None
+
+    # Live mode preview
+    existing_match = [
+        o for o in orders
+        if o["account"] == acc and o.get("symbol", "BTC") == symbol and o["side"] == side
+    ]
+    if existing_match:
+        ex = existing_match[0]
+        ex_lots = qty_to_lots(ex.get("qty", 0) or 0, symbol)
+        st.warning(f"📐 PYRAMID mode (as of now): existing {ex_lots} lots @ ${ex.get('entry_price',0):,.2f}")
+    else:
+        st.info("🆕 FIXED mode (as of now): will open as new position.")
+
+    if st.button("💾 Update Pre-Order", use_container_width=True):
+        if target_entry <= 0 or lot_qty <= 0:
+            st.error("Target Entry Price and Quantity are required.")
+        elif liq_val and side == "Buy" and liq_val >= target_entry:
+            st.error("❌ Liquidation price for a Buy must be below entry price.")
+        elif liq_val and side == "Sell" and liq_val <= target_entry:
+            st.error("❌ Liquidation price for a Sell must be above entry price.")
+        else:
+            pre_orders[idx].update({
+                "account": acc,
+                "symbol": symbol,
+                "side": side,
+                "target_entry_price": target_entry,
+                "qty": lot_qty * ls,
+                "liquidation": liq_val,
+                "target": tg_val,
+                "stop_loss": sl_val,
+                "alert_threshold": threshold,
+            })
+            save_pre_orders(pre_orders)
+            st.success("✅ Pre-order updated.")
+            st.rerun()
+            
 @st.dialog("🗑️ Bulk Close Positions", width="large")
 def dialog_bulk_close(orders, filtered):
     if "bulk_close_version" not in st.session_state:
