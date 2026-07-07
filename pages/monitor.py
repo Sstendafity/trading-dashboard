@@ -2097,17 +2097,6 @@ if pre_orders:
 
         pc1, pc2, pc3 = st.columns([9, 1, 1])
         with pc1:
-            st.markdown(f"""...""", unsafe_allow_html=True)  # existing card HTML unchanged
-        with pc2:
-            if st.button("✏️", key=f"edit_pre_{i}", help="Edit pre-order"):
-                dialog_edit_pre_order(pre_orders, i, orders)
-        with pc3:
-            if st.button("✕", key=f"del_pre_{i}", help="Cancel pre-order"):
-                pre_orders.pop(i)
-                save_pre_orders(pre_orders)
-                st.rerun()
-
-        with pc1:
             st.markdown(f"""
             <div style="background:var(--secondary-background-color);
                         border:1px solid rgba(128,128,128,0.15);
@@ -2128,10 +2117,14 @@ if pre_orders:
             </div>
             """, unsafe_allow_html=True)
         with pc2:
+            if st.button("✏️", key=f"edit_pre_{i}", help="Edit pre-order"):
+                dialog_edit_pre_order(pre_orders, i, orders)
+        with pc3:
             if st.button("✕", key=f"del_pre_{i}", help="Cancel pre-order"):
                 pre_orders.pop(i)
                 save_pre_orders(pre_orders)
                 st.rerun()
+
     st.markdown("---")
 
 # ==========================================
@@ -2149,17 +2142,6 @@ if stop_orders:
         dist_str = f"${abs(curr_price - so['trigger_price']):,.2f} away" if curr_price > 0 else "—"
 
         pc1, pc2, pc3 = st.columns([9, 1, 1])
-        with pc1:
-            st.markdown(f"""...""", unsafe_allow_html=True)  # existing card HTML unchanged
-        with pc2:
-            if st.button("✏️", key=f"edit_so_{i}", help="Edit stop-order"):
-                dialog_edit_stop_order(stop_orders, i, orders)
-        with pc3:
-            if st.button("✕", key=f"del_so_{i}", help="Cancel stop-order"):
-                stop_orders.pop(i)
-                save_stop_orders(stop_orders)
-                st.rerun()
-                
         with pc1:
             st.markdown(f"""
             <div style="background:var(--secondary-background-color);
@@ -2182,10 +2164,14 @@ if stop_orders:
             </div>
             """, unsafe_allow_html=True)
         with pc2:
+            if st.button("✏️", key=f"edit_so_{i}", help="Edit stop-order"):
+                dialog_edit_stop_order(stop_orders, i, orders)
+        with pc3:
             if st.button("✕", key=f"del_so_{i}", help="Cancel stop-order"):
                 stop_orders.pop(i)
                 save_stop_orders(stop_orders)
                 st.rerun()
+
     st.markdown("---")
 
 # ==========================================
