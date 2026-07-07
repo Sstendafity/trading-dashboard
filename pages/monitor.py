@@ -23,6 +23,9 @@ import io
 # ==========================================
 
 ORDERS_DB = "running_orders.json"
+STOP_ORDERS_DB = "stop_orders.json"
+PRE_ORDERS_DB = "pre_orders.json"
+
 USD_TO_INR = 85.0
 LOT_SIZE = 0.001      # 1 lot = 0.001 BTC
 ETH_LOT_SIZE = 0.01   # 1 lot = 0.01 ETH
@@ -270,6 +273,56 @@ def save_orders(orders):
                 repo.update_file(ORDERS_DB, "Update running orders", content, existing.sha)
             except Exception:
                 repo.create_file(ORDERS_DB, "Create running orders", content)
+        except Exception as e:
+            st.warning(f"GitHub sync failed: {e}")
+            
+def load_stop_orders():
+    if os.path.exists(STOP_ORDERS_DB):
+        try:
+            with open(STOP_ORDERS_DB, "r") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+def save_stop_orders(stop_orders):
+    with open(STOP_ORDERS_DB, "w") as f:
+        json.dump(stop_orders, f, indent=2)
+    if GITHUB_TOKEN:
+        try:
+            g = Github(GITHUB_TOKEN)
+            repo = g.get_repo(REPO_NAME)
+            content = json.dumps(stop_orders, indent=2)
+            try:
+                existing = repo.get_contents(STOP_ORDERS_DB)
+                repo.update_file(STOP_ORDERS_DB, "Update stop orders", content, existing.sha)
+            except Exception:
+                repo.create_file(STOP_ORDERS_DB, "Create stop orders", content)
+        except Exception as e:
+            st.warning(f"GitHub sync failed: {e}")
+
+def load_pre_orders():
+    if os.path.exists(PRE_ORDERS_DB):
+        try:
+            with open(PRE_ORDERS_DB, "r") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+def save_pre_orders(pre_orders):
+    with open(PRE_ORDERS_DB, "w") as f:
+        json.dump(pre_orders, f, indent=2)
+    if GITHUB_TOKEN:
+        try:
+            g = Github(GITHUB_TOKEN)
+            repo = g.get_repo(REPO_NAME)
+            content = json.dumps(pre_orders, indent=2)
+            try:
+                existing = repo.get_contents(PRE_ORDERS_DB)
+                repo.update_file(PRE_ORDERS_DB, "Update pre orders", content, existing.sha)
+            except Exception:
+                repo.create_file(PRE_ORDERS_DB, "Create pre orders", content)
         except Exception as e:
             st.warning(f"GitHub sync failed: {e}")
 
@@ -591,6 +644,154 @@ def dialog_edit_position(orders, idx):
             }
             save_orders(orders)
             st.success("✅ Position updated.")
+            st.rerun()
+
+@st.dialog("🛑 Add Stop-Order (Partial Close)", width="large")
+def dialog_add_stop_order(orders, stop_orders):
+    if not orders:
+        st.info("No running positions to attach a stop-order to.")
+        return
+
+    # Build selectable list of running positions
+    position_labels = []
+    for idx, o in enumerate(orders):
+        sym = o.get("symbol", "BTC")
+        lots = qty_to_lots(o.get("qty", 0) or 0, sym)
+        label = (
+            f"{o['account']} [{sym}] {o['side']} @ ${o.get('entry_price',0):,.2f} "
+            f"— {lots} lots"
+        )
+        position_labels.append(label)
+
+    selected_label = st.selectbox("Attach to Running Position", position_labels, key="so_target_pos")
+    selected_idx = position_labels.index(selected_label)
+    target_order = orders[selected_idx]
+    sym = target_order.get("symbol", "BTC")
+    current_lots = qty_to_lots(target_order.get("qty", 0) or 0, sym)
+
+    st.caption(f"Current position: {current_lots} lots @ ${target_order.get('entry_price',0):,.2f}")
+
+    f1, f2 = st.columns(2)
+    with f1:
+        direction = st.selectbox(
+            "Trigger When Price",
+            ["Drops to or below", "Rises to or above"],
+            key="so_direction"
+        )
+        trigger_price = st.number_input(
+            "Trigger Price (USD)", min_value=0.0, value=0.0, step=0.1, key="so_price"
+        )
+    with f2:
+        ls = get_lot_size(sym)
+        partial_lots = st.number_input(
+            "Partial Close Quantity (Lots)",
+            min_value=1, max_value=max(1, current_lots), value=1, step=1,
+            key="so_qty", help=f"Must be ≤ {current_lots} lots (current position size)"
+        )
+        st.caption(f"= {partial_lots * ls:.4f} {sym}  ·  Remaining after trigger: {current_lots - partial_lots} lots")
+
+    if st.button("✅ Add Stop-Order", use_container_width=True):
+        if trigger_price <= 0:
+            st.error("Trigger price is required.")
+        elif partial_lots > current_lots:
+            st.error(f"Cannot close more than current position size ({current_lots} lots).")
+        else:
+            stop_orders.append({
+                "target_account": target_order["account"],
+                "target_symbol": sym,
+                "target_side": target_order["side"],
+                "target_entry_price": target_order.get("entry_price", 0),
+                "trigger_direction": "at_or_below" if direction == "Drops to or below" else "at_or_above",
+                "trigger_price": trigger_price,
+                "qty": partial_lots * ls,
+                "created_at": str(datetime.datetime.now()),
+            })
+            save_stop_orders(stop_orders)
+            st.success(f"✅ Stop-order added — closes {partial_lots} lots @ ${trigger_price:,.2f}")
+            st.rerun()
+
+@st.dialog("⏳ Add Pre-Order", width="large")
+def dialog_add_pre_order(pre_orders, orders):
+    st.caption(
+        "If no running position exists for this account+symbol+side at trigger time, "
+        "it opens as a new position. If one already exists, it pyramids (averages entry)."
+    )
+
+    f1, f2, f3 = st.columns(3)
+    with f1:
+        acc = st.selectbox("Account", ACCOUNTS, key="pre_acc")
+        symbol = st.selectbox("Symbol", SYMBOLS, key="pre_symbol")
+        side = st.selectbox("Side", ["Buy", "Sell"], key="pre_side")
+    with f2:
+        target_entry = st.number_input(
+            "Target Entry Price (USD)", min_value=0.0, value=0.0, step=0.1, key="pre_entry",
+            help="Buy: triggers when CP ≤ this price. Sell: triggers when CP ≥ this price."
+        )
+        ls = get_lot_size(symbol)
+        lot_qty = st.number_input("Quantity (Lots)", min_value=1, value=1,
+                                  step=1, key="pre_qty", help=f"1 lot = {ls} {symbol}")
+        st.caption(f"= {lot_qty * ls:.4f} {symbol}")
+        threshold = st.number_input("Alert Threshold (%)", min_value=0.5,
+                                    max_value=20.0, value=3.0, step=0.5, key="pre_threshold")
+    with f3:
+        liq_input = st.number_input("Liquidation Price (optional)",
+                                    min_value=0.0, value=0.0, step=0.1, key="pre_liq")
+        liq_val = liq_input if liq_input > 0 else None
+
+    f4, f5 = st.columns(2)
+    with f4:
+        tg_input = st.number_input("Target / TG (optional)",
+                                   min_value=0.0, value=0.0, step=0.1, key="pre_tg")
+        tg_val = tg_input if tg_input > 0 else None
+    with f5:
+        sl_input = st.number_input("Stop Loss / SL (optional)",
+                                   min_value=0.0, value=0.0, step=0.1, key="pre_sl")
+        sl_val = sl_input if sl_input > 0 else None
+
+    # Live preview of fixed vs pyramid based on CURRENT state
+    existing_match = [
+        o for o in orders
+        if o["account"] == acc and o.get("symbol", "BTC") == symbol and o["side"] == side
+    ]
+    if existing_match:
+        ex = existing_match[0]
+        ex_lots = qty_to_lots(ex.get("qty", 0) or 0, symbol)
+        st.warning(
+            f"📐 PYRAMID mode (as of now): existing {ex_lots} lots @ ${ex.get('entry_price',0):,.2f} "
+            f"will be averaged with this order when triggered."
+        )
+    else:
+        st.info("🆕 FIXED mode (as of now): no matching running position — will open as new.")
+    st.caption("Note: mode is re-evaluated at trigger time, not when you add this order.")
+
+    if target_entry > 0:
+        cp_now = st.session_state.get("current_cp", 0) if symbol == "BTC" else st.session_state.get("current_eth_cp", 0)
+        if cp_now > 0:
+            diff = abs(cp_now - target_entry)
+            st.caption(f"Current price: ${cp_now:,.2f} — ${diff:,.2f} away from trigger")
+
+    if st.button("✅ Add Pre-Order", use_container_width=True):
+        if target_entry <= 0 or lot_qty <= 0:
+            st.error("Target Entry Price and Quantity are required.")
+        elif liq_val and side == "Buy" and liq_val >= target_entry:
+            st.error("❌ Liquidation price for a Buy must be below entry price.")
+        elif liq_val and side == "Sell" and liq_val <= target_entry:
+            st.error("❌ Liquidation price for a Sell must be above entry price.")
+        else:
+            pre_orders.append({
+                "account": acc,
+                "symbol": symbol,
+                "side": side,
+                "target_entry_price": target_entry,
+                "qty": lot_qty * ls,
+                "liquidation": liq_val,
+                "target": tg_val,
+                "stop_loss": sl_val,
+                "alert_threshold": threshold,
+                "created_at": str(datetime.datetime.now()),
+            })
+            save_pre_orders(pre_orders)
+            st.success(f"✅ Pre-order added — {acc} [{symbol}] {side} @ ${target_entry:,.2f}")
             st.rerun()
 
 @st.dialog("🗑️ Bulk Close Positions", width="large")
@@ -972,6 +1173,217 @@ def live_dashboard(orders):
 
     cp = price_data["price"]
     eth_cp = eth_data["price"]
+
+    # ==========================================
+    # STOP-ORDER TRIGGER CHECK (partial close)
+    # ==========================================
+    stop_orders = load_stop_orders()
+    if stop_orders:
+        so_triggered = []
+        so_remaining = []
+        for so in stop_orders:
+            sym = so.get("target_symbol", "BTC")
+            price = eth_cp if sym == "ETH" else cp
+            direction = so.get("trigger_direction", "at_or_below")
+            trigger_price = so.get("trigger_price", 0)
+
+            if price <= 0 or trigger_price <= 0:
+                so_remaining.append(so)
+                continue
+
+            hit = (direction == "at_or_below" and price <= trigger_price) or \
+                  (direction == "at_or_above" and price >= trigger_price)
+
+            if hit:
+                so_triggered.append(so)
+            else:
+                so_remaining.append(so)
+
+        if so_triggered:
+            TG_TOKEN = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
+            TG_CHATS = [c for c in [
+                st.secrets.get("TELEGRAM_CHAT_ID", ""),
+                st.secrets.get("TELEGRAM_CHAT_ID_2", ""),
+            ] if c]
+
+            for so in so_triggered:
+                sym = so.get("target_symbol", "BTC")
+                price = eth_cp if sym == "ETH" else cp
+
+                # Find matching running order (snapshot match)
+                match_idx = None
+                for idx, o in enumerate(orders):
+                    if (o["account"] == so["target_account"] and
+                        o.get("symbol", "BTC") == sym and
+                        o["side"] == so["target_side"] and
+                        abs(o.get("entry_price", 0) - so["target_entry_price"]) < 0.01):
+                        match_idx = idx
+                        break
+
+                if match_idx is None:
+                    # Position no longer exists — skip silently, don't re-add to remaining
+                    st.toast(f"⚠️ Stop-order target position no longer found — skipped", icon="⚠️")
+                    continue
+
+                target_pos = orders[match_idx]
+                close_qty = so.get("qty", 0)
+                remaining_qty = (target_pos.get("qty", 0) or 0) - close_qty
+
+                # Calculate realized P&L for the partial close
+                entry = target_pos.get("entry_price", 0)
+                side = target_pos["side"]
+                if side == "Buy":
+                    realized_usd = (price - entry) * close_qty
+                else:
+                    realized_usd = (entry - price) * close_qty
+                realized_inr = realized_usd * USD_TO_INR
+
+                closed_lots = qty_to_lots(close_qty, sym)
+
+                if remaining_qty <= 0.0000001:
+                    # Fully closed
+                    orders.pop(match_idx)
+                    close_note = "Position fully closed."
+                else:
+                    orders[match_idx]["qty"] = remaining_qty
+                    remaining_lots = qty_to_lots(remaining_qty, sym)
+                    close_note = f"Remaining: {remaining_lots} lots @ ${entry:,.2f}"
+
+                # Telegram notification
+                if TG_TOKEN and TG_CHATS:
+                    pnl_sign = "+" if realized_inr >= 0 else ""
+                    msg = (
+                        f"🛑 <b>STOP-ORDER TRIGGERED</b>\n"
+                        f"━━━━━━━━━━━━━━━━━━\n"
+                        f"<b>{so['target_account']}</b> [{sym}] {side.upper()}\n"
+                        f"Closed: <code>{closed_lots} lots</code> @ <code>${price:,.2f}</code>\n"
+                        f"Realized P&L: <code>{pnl_sign}₹{realized_inr:,.0f}</code>\n"
+                        f"━━━━━━━━━━━━━━━━━━\n"
+                        f"{close_note}"
+                    )
+                    for cid in TG_CHATS:
+                        requests.post(
+                            f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+                            json={"chat_id": cid, "text": msg, "parse_mode": "HTML"},
+                            timeout=10
+                        )
+
+                st.toast(f"🛑 {so['target_account']} [{sym}] stop-order hit — {closed_lots} lots closed", icon="🛑")
+
+            save_orders(orders)
+            save_stop_orders(so_remaining)
+            st.rerun(scope="fragment")
+
+    # ==========================================
+    # PRE-ORDER TRIGGER CHECK (fixed / pyramid)
+    # ==========================================
+    pre_orders = load_pre_orders()
+    if pre_orders:
+        po_triggered = []
+        po_remaining = []
+        for po in pre_orders:
+            sym = po.get("symbol", "BTC")
+            price = eth_cp if sym == "ETH" else cp
+            side = po.get("side", "Buy")
+            target = po.get("target_entry_price", 0)
+
+            if price <= 0 or target <= 0:
+                po_remaining.append(po)
+                continue
+
+            hit = (side == "Buy" and price <= target) or (side == "Sell" and price >= target)
+
+            if hit:
+                po_triggered.append(po)
+            else:
+                po_remaining.append(po)
+
+        if po_triggered:
+            TG_TOKEN = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
+            TG_CHATS = [c for c in [
+                st.secrets.get("TELEGRAM_CHAT_ID", ""),
+                st.secrets.get("TELEGRAM_CHAT_ID_2", ""),
+            ] if c]
+
+            for po in po_triggered:
+                sym = po.get("symbol", "BTC")
+                price = eth_cp if sym == "ETH" else cp
+                side = po.get("side", "Buy")
+                new_qty = po.get("qty", 0)
+                new_entry = po["target_entry_price"]
+                lots = qty_to_lots(new_qty, sym)
+
+                # Check for existing matching running position (account+symbol+side)
+                match_idx = None
+                for idx, o in enumerate(orders):
+                    if (o["account"] == po["account"] and
+                        o.get("symbol", "BTC") == sym and
+                        o["side"] == side):
+                        match_idx = idx
+                        break
+
+                if match_idx is not None:
+                    # PYRAMID — weighted average entry
+                    existing = orders[match_idx]
+                    ex_qty = existing.get("qty", 0) or 0
+                    ex_entry = existing.get("entry_price", 0) or 0
+
+                    total_qty = ex_qty + new_qty
+                    avg_entry = ((ex_qty * ex_entry) + (new_qty * new_entry)) / total_qty if total_qty > 0 else new_entry
+
+                    orders[match_idx]["qty"] = total_qty
+                    orders[match_idx]["entry_price"] = round(avg_entry, 2)
+                    # Keep existing liq/tg/sl unless pre-order specifies new ones
+                    if po.get("liquidation"):
+                        orders[match_idx]["liquidation"] = po["liquidation"]
+                    if po.get("target"):
+                        orders[match_idx]["target"] = po["target"]
+                    if po.get("stop_loss"):
+                        orders[match_idx]["stop_loss"] = po["stop_loss"]
+
+                    total_lots = qty_to_lots(total_qty, sym)
+                    mode_note = f"PYRAMID — new avg entry ${avg_entry:,.2f}, total {total_lots} lots"
+                else:
+                    # FIXED — new position
+                    new_order = {
+                        "account": po["account"],
+                        "symbol": sym,
+                        "side": side,
+                        "entry_price": new_entry,
+                        "qty": new_qty,
+                        "liquidation": po.get("liquidation"),
+                        "target": po.get("target"),
+                        "stop_loss": po.get("stop_loss"),
+                        "alert_threshold": po.get("alert_threshold", 3.0),
+                        "added_at": str(datetime.datetime.now()),
+                    }
+                    orders.append(new_order)
+                    mode_note = f"FIXED — new position opened, {lots} lots"
+
+                # Telegram notification
+                if TG_TOKEN and TG_CHATS:
+                    msg = (
+                        f"🟢 <b>PRE-ORDER TRIGGERED</b>\n"
+                        f"━━━━━━━━━━━━━━━━━━\n"
+                        f"<b>{po['account']}</b> [{sym}] {side.upper()}\n"
+                        f"Trigger Entry: <code>${new_entry:,.2f}</code>\n"
+                        f"Current Price: <code>${price:,.2f}</code>\n"
+                        f"Qty Added: <code>{lots} lots</code>\n"
+                        f"━━━━━━━━━━━━━━━━━━\n"
+                        f"{mode_note}"
+                    )
+                    for cid in TG_CHATS:
+                        requests.post(
+                            f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+                            json={"chat_id": cid, "text": msg, "parse_mode": "HTML"},
+                            timeout=10
+                        )
+
+                st.toast(f"🟢 {po['account']} [{sym}] pre-order triggered!", icon="✅")
+
+            save_orders(orders)
+            save_pre_orders(po_remaining)
+            st.rerun(scope="fragment")
 
     # ==========================================
     # PRICE BAR — BTC and ETH side by side
@@ -1514,14 +1926,114 @@ live_dashboard(orders)
 cp = st.session_state.get("current_cp", 0)
 eth_cp = st.session_state.get("current_eth_cp", 0)
 
-# ==========================================
-# ADD POSITION BUTTON
-# ==========================================
+pre_orders = load_pre_orders()
+stop_orders = load_stop_orders()
 
-if st.button("➕ Add New Position"):
-    dialog_add_position(orders)
+btn_add1, btn_add2, btn_add3 = st.columns(3)
+with btn_add1:
+    if st.button("➕ Add New Position", use_container_width=True):
+        dialog_add_position(orders)
+with btn_add2:
+    if st.button("⏳ Add Pre-Order", use_container_width=True):
+        dialog_add_pre_order(pre_orders, orders)
+with btn_add3:
+    if st.button("🛑 Add Stop-Order", use_container_width=True):
+        dialog_add_stop_order(orders, stop_orders)
 
-st.markdown("---")
+# ==========================================
+# PRE-ORDERS SECTION
+# ==========================================
+if pre_orders:
+    st.markdown("### ⏳ Pending Pre-Orders")
+    for i, po in enumerate(pre_orders):
+        sym = po.get("symbol", "BTC")
+        side = po.get("side", "Buy")
+        target = po.get("target_entry_price", 0)
+        lots = qty_to_lots(po.get("qty", 0) or 0, sym)
+        exchange = ACCOUNT_GROUP.get(po["account"], "?")
+        side_color = "#00c853" if side == "Buy" else "#ff1744"
+        side_arrow = "↑" if side == "Buy" else "↓"
+
+        # Determine current mode
+        will_pyramid = any(
+            o["account"] == po["account"] and o.get("symbol", "BTC") == sym and o["side"] == side
+            for o in orders
+        )
+        mode_label = "📐 PYRAMID" if will_pyramid else "🆕 FIXED"
+
+        curr_price = st.session_state.get("current_eth_cp", 0) if sym == "ETH" else st.session_state.get("current_cp", 0)
+        dist_str = f"${abs(curr_price - target):,.2f} away" if curr_price > 0 else "—"
+
+        pc1, pc2 = st.columns([10, 1])
+        with pc1:
+            st.markdown(f"""
+            <div style="background:var(--secondary-background-color);
+                        border:1px solid rgba(128,128,128,0.15);
+                        border-left: 3px solid {side_color};
+                        border-radius:8px;padding:12px 16px;
+                        display:flex;justify-content:space-between;align-items:center">
+                <div>
+                    <span style="font-weight:700">{po['account']}</span>
+                    <span style="color:#888;font-size:12px;margin-left:6px">({exchange})</span>
+                    <span style="color:{side_color};font-weight:700;margin-left:10px">{side_arrow} {side.upper()}</span>
+                    <span style="color:#888;font-size:12px;margin-left:6px">[{sym}]</span>
+                    <span style="font-size:11px;margin-left:10px;opacity:0.8">{mode_label}</span>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:16px;font-weight:700;font-family:monospace">@ ${target:,.2f}</div>
+                    <div style="font-size:12px;color:#888">{lots} lots · {dist_str}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        with pc2:
+            if st.button("✕", key=f"del_pre_{i}", help="Cancel pre-order"):
+                pre_orders.pop(i)
+                save_pre_orders(pre_orders)
+                st.rerun()
+    st.markdown("---")
+
+# ==========================================
+# STOP-ORDERS SECTION
+# ==========================================
+if stop_orders:
+    st.markdown("### 🛑 Pending Stop-Orders")
+    for i, so in enumerate(stop_orders):
+        sym = so.get("target_symbol", "BTC")
+        lots = qty_to_lots(so.get("qty", 0) or 0, sym)
+        exchange = ACCOUNT_GROUP.get(so["target_account"], "?")
+        direction_label = "≤" if so.get("trigger_direction") == "at_or_below" else "≥"
+
+        curr_price = st.session_state.get("current_eth_cp", 0) if sym == "ETH" else st.session_state.get("current_cp", 0)
+        dist_str = f"${abs(curr_price - so['trigger_price']):,.2f} away" if curr_price > 0 else "—"
+
+        pc1, pc2 = st.columns([10, 1])
+        with pc1:
+            st.markdown(f"""
+            <div style="background:var(--secondary-background-color);
+                        border:1px solid rgba(128,128,128,0.15);
+                        border-left: 3px solid #ffa726;
+                        border-radius:8px;padding:12px 16px;
+                        display:flex;justify-content:space-between;align-items:center">
+                <div>
+                    <span style="font-weight:700">{so['target_account']}</span>
+                    <span style="color:#888;font-size:12px;margin-left:6px">({exchange})</span>
+                    <span style="color:#ffa726;font-weight:700;margin-left:10px">{so['target_side'].upper()}</span>
+                    <span style="color:#888;font-size:12px;margin-left:6px">[{sym}]</span>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:16px;font-weight:700;font-family:monospace">
+                        Price {direction_label} ${so['trigger_price']:,.2f}
+                    </div>
+                    <div style="font-size:12px;color:#888">close {lots} lots · {dist_str}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        with pc2:
+            if st.button("✕", key=f"del_so_{i}", help="Cancel stop-order"):
+                stop_orders.pop(i)
+                save_stop_orders(stop_orders)
+                st.rerun()
+    st.markdown("---")
 
 # ==========================================
 # POSITION CARDS
