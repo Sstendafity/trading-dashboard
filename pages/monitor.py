@@ -754,11 +754,10 @@ def dialog_add_pre_order(pre_orders, orders):
         if o["account"] == acc and o.get("symbol", "BTC") == symbol and o["side"] == side
     ]
     if existing_match:
-        ex = existing_match[0]
-        ex_lots = qty_to_lots(ex.get("qty", 0) or 0, symbol)
+        ex_lots = sum(qty_to_lots(o.get("qty", 0) or 0, symbol) for o in existing_match)
         st.warning(
-            f"📐 PYRAMID mode (as of now): existing {ex_lots} lots @ ${ex.get('entry_price',0):,.2f} "
-            f"will be averaged with this order when triggered."
+            f"📐 PYRAMID mode (as of now): {len(existing_match)} existing entr{'y' if len(existing_match)==1 else 'ies'} "
+            f"totaling {ex_lots} lots — this will stack as an additional entry."
         )
     else:
         st.info("🆕 FIXED mode (as of now): no matching running position — will open as new.")
@@ -1322,42 +1321,36 @@ def live_dashboard(orders):
                         match_idx = idx
                         break
 
-                if match_idx is not None:
-                    # PYRAMID — weighted average entry
-                    existing = orders[match_idx]
-                    ex_qty = existing.get("qty", 0) or 0
-                    ex_entry = existing.get("entry_price", 0) or 0
+                # Check for existing matching running position (account+symbol+side)
+                has_existing = any(
+                    o["account"] == po["account"] and
+                    o.get("symbol", "BTC") == sym and
+                    o["side"] == side
+                    for o in orders
+                )
 
-                    total_qty = ex_qty + new_qty
-                    avg_entry = ((ex_qty * ex_entry) + (new_qty * new_entry)) / total_qty if total_qty > 0 else new_entry
+                # Always append as a new entry — stacking, not averaging
+                new_order = {
+                    "account": po["account"],
+                    "symbol": sym,
+                    "side": side,
+                    "entry_price": new_entry,
+                    "qty": new_qty,
+                    "liquidation": po.get("liquidation"),
+                    "target": po.get("target"),
+                    "stop_loss": po.get("stop_loss"),
+                    "alert_threshold": po.get("alert_threshold", 3.0),
+                    "added_at": str(datetime.datetime.now()),
+                }
+                orders.append(new_order)
 
-                    orders[match_idx]["qty"] = total_qty
-                    orders[match_idx]["entry_price"] = round(avg_entry, 2)
-                    # Keep existing liq/tg/sl unless pre-order specifies new ones
-                    if po.get("liquidation"):
-                        orders[match_idx]["liquidation"] = po["liquidation"]
-                    if po.get("target"):
-                        orders[match_idx]["target"] = po["target"]
-                    if po.get("stop_loss"):
-                        orders[match_idx]["stop_loss"] = po["stop_loss"]
-
-                    total_lots = qty_to_lots(total_qty, sym)
-                    mode_note = f"PYRAMID — new avg entry ${avg_entry:,.2f}, total {total_lots} lots"
+                if has_existing:
+                    stack_count = sum(
+                        1 for o in orders
+                        if o["account"] == po["account"] and o.get("symbol", "BTC") == sym and o["side"] == side
+                    )
+                    mode_note = f"PYRAMID — stacked as entry #{stack_count}, {lots} lots @ ${new_entry:,.2f}"
                 else:
-                    # FIXED — new position
-                    new_order = {
-                        "account": po["account"],
-                        "symbol": sym,
-                        "side": side,
-                        "entry_price": new_entry,
-                        "qty": new_qty,
-                        "liquidation": po.get("liquidation"),
-                        "target": po.get("target"),
-                        "stop_loss": po.get("stop_loss"),
-                        "alert_threshold": po.get("alert_threshold", 3.0),
-                        "added_at": str(datetime.datetime.now()),
-                    }
-                    orders.append(new_order)
                     mode_note = f"FIXED — new position opened, {lots} lots"
 
                 # Telegram notification
@@ -2093,43 +2086,68 @@ if orders:
 
         cards_expanded = st.session_state["cards_expanded"]
 
-        # ---- Position Cards Loop ----
-        for i, (o, c) in enumerate(filtered):
-            sym = o.get("symbol", "BTC")
-            side_label = "BUY / LONG" if o["side"] == "Buy" else "SELL / SHORT"
-            danger_pct = c["danger_pct"] or 0
-            card_cp = get_card_cp(o)
-            liq = o.get("liquidation")
-            tg = o.get("target")
-            sl = o.get("stop_loss")
+        # ---- Group filtered positions into stacks ----
+    stacks = {}
+    for o, c in filtered:
+        key = (o["account"], o.get("symbol", "BTC"), o["side"])
+        stacks.setdefault(key, []).append((o, c))
 
-            # Auto-expand if danger >= 70%
-            should_expand = cards_expanded or danger_pct >= 70
+    for i, ((acc, sym, side), entries) in enumerate(stacks.items()):
+        side_label = "BUY / LONG" if side == "Buy" else "SELL / SHORT"
+        stack_total_inr = sum(c["running_inr"] for _, c in entries)
+        stack_total_usd = sum(c["running_usd"] for _, c in entries)
+        stack_qty = sum(o.get("qty", 0) or 0 for o, _ in entries)
+        stack_lots = qty_to_lots(stack_qty, sym)
+        max_danger = max((c["danger_pct"] or 0) for _, c in entries)
+        should_expand = st.session_state.get("cards_expanded", False) or max_danger >= 70
 
-            with st.expander(
-                f"{o['account']} [{sym}] ({ACCOUNT_GROUP.get(o['account'], '?')}) "
-                f"— {side_label} — Running: {fmt_inr(c['running_inr'])}",
-                expanded=should_expand
-            ):
-                # ---- Row 1: Position Info + P&L (2 columns) ----
+        stack_badge = f" · {len(entries)} entries stacked" if len(entries) > 1 else ""
+
+        with st.expander(
+            f"{acc} [{sym}] ({ACCOUNT_GROUP.get(acc, '?')}) — {side_label} — "
+            f"Stack Total: {fmt_inr(stack_total_inr)}{stack_badge}",
+            expanded=should_expand
+        ):
+            if len(entries) > 1:
+                # Stack summary bar
+                stack_color = "#00e676" if stack_total_inr >= 0 else "#ff1744"
+                st.markdown(f"""
+                <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px;margin-bottom:10px">
+                    <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">
+                        Stack Summary — {len(entries)} entries
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <div>
+                            <div class="stat-label">Total Qty</div>
+                            <div class="stat-value">{stack_lots} lots</div>
+                        </div>
+                        <div style="text-align:right">
+                            <div class="stat-label">Combined P&L</div>
+                            <div style="font-size:18px;font-weight:800;font-family:monospace;color:{stack_color}">
+                                {fmt_inr(stack_total_inr)}
+                            </div>
+                            <div style="font-size:11px;color:#888">{fmt_usd(stack_total_usd)}</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # ---- Each entry in the stack ----
+            for j, (o, c) in enumerate(entries):
+                card_cp = get_card_cp(o)
+                liq = o.get("liquidation")
+                tg = o.get("target")
+                sl = o.get("stop_loss")
+                danger_pct = c["danger_pct"] or 0
+
+                entry_label = f"Entry #{j+1}" if len(entries) > 1 else "Position"
+                st.markdown(f"**{entry_label}** — added {o.get('added_at', '—')[:16]}")
+
                 r1_left, r1_right = st.columns(2)
-
                 with r1_left:
                     st.markdown(f"""
                     <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px">
-                        <div style="font-size:10px;color:#888;text-transform:uppercase;
-                                    letter-spacing:1px;margin-bottom:8px">Position</div>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                            <div>
-                                <div class="stat-label">Symbol</div>
-                                <div class="stat-value">{sym}</div>
-                            </div>
-                            <div>
-                                <div class="stat-label">Side</div>
-                                <div class="stat-value" style="color:{'#00c853' if o['side']=='Buy' else '#ff1744'}">
-                                    {'▲ LONG' if o['side']=='Buy' else '▼ SHORT'}
-                                </div>
-                            </div>
                             <div>
                                 <div class="stat-label">Entry Price</div>
                                 <div class="stat-value">${o.get('entry_price', 0):,.2f}</div>
@@ -2153,121 +2171,41 @@ if orders:
                 with r1_right:
                     pnl_color = "#00e676" if c["running_inr"] >= 0 else "#ff1744"
                     st.markdown(f"""
-                    <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px">
-                        <div style="font-size:10px;color:#888;text-transform:uppercase;
-                                    letter-spacing:1px;margin-bottom:8px">Running P&L</div>
-                        <div style="text-align:center;padding:2px 0">
-                            <div style="font-size:18px;font-weight:800;font-family:monospace;
-                                        color:{pnl_color};line-height:1.1">
-                                {fmt_inr(c['running_inr'])}
-                            </div>
-                            <div style="font-size:12px;color:#888;margin-top:4px;font-family:monospace">
-                                {fmt_usd(c['running_usd'])}
-                            </div>
+                    <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px;text-align:center">
+                        <div style="font-size:18px;font-weight:800;font-family:monospace;color:{pnl_color}">
+                            {fmt_inr(c['running_inr'])}
+                        </div>
+                        <div style="font-size:12px;color:#888;margin-top:2px;font-family:monospace">
+                            {fmt_usd(c['running_usd'])}
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
 
-                st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
+                if liq:
+                    bar_pct = min(danger_pct, 100)
+                    bar_color = "#ff1744" if bar_pct >= 70 else ("#ffa726" if bar_pct >= 40 else "#00e676")
+                    st.markdown(f"""
+                    <div style="margin-top:6px">
+                        <div class="stat-label">Liq: ${liq:,.2f} — {bar_pct:.0f}% toward liquidation</div>
+                        <div style="background:#2a2a4a;border-radius:4px;height:6px;overflow:hidden;margin-top:4px">
+                            <div style="width:{bar_pct}%;background:{bar_color};height:100%;border-radius:4px"></div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                # ---- Row 2: Liquidation + TG/SL (2 columns) ----
-                r2_left, r2_right = st.columns(2)
-
-                with r2_left:
-                    if liq:
-                        bar_pct = min(danger_pct, 100)
-                        bar_color = "#ff1744" if bar_pct >= 70 else ("#ffa726" if bar_pct >= 40 else "#00e676")
-                        st.markdown(f"""
-                        <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px">
-                            <div style="font-size:10px;color:#888;text-transform:uppercase;
-                                        letter-spacing:1px;margin-bottom:8px">Liquidation</div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-                                <div>
-                                    <div class="stat-label">Liq Price</div>
-                                    <div class="stat-value" style="color:#ff6b6b">${liq:,.2f}</div>
-                                </div>
-                                <div>
-                                    <div class="stat-label">Distance</div>
-                                    <div class="stat-value">${abs(c['liq_danger']):,.2f}</div>
-                                </div>
-                                <div>
-                                    <div class="stat-label">Liq Loss (INR)</div>
-                                    <div class="stat-value" style="color:#ff1744">{fmt_inr(c['liq_loss_inr'])}</div>
-                                </div>
-                            </div>
-                            <div class="stat-label">Risk — {bar_pct:.0f}% toward liquidation</div>
-                            <div style="background:#2a2a4a;border-radius:4px;height:8px;
-                                        overflow:hidden;margin-top:4px">
-                                <div style="width:{bar_pct}%;background:{bar_color};
-                                            height:100%;border-radius:4px"></div>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown("""
-                        <div style="background:rgba(255,255,255,0.03);border-radius:8px;
-                                    padding:12px;text-align:center">
-                            <div class="stat-label">Liquidation</div>
-                            <div class="stat-value" style="color:#555">Not set</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                with r2_right:
-                    tg_block = ""
-                    sl_block = ""
-                    if tg:
-                        tg_block = f"""
-                        <div>
-                            <div class="stat-label">Target (TG)</div>
-                            <div class="stat-value" style="color:#69f0ae">${tg:,.2f}</div>
-                        </div>
-                        <div>
-                            <div class="stat-label">Profit at TG</div>
-                            <div class="stat-value" style="color:#00e676">{fmt_inr(c['profit_inr'])}</div>
-                        </div>
-                        """
-                    if sl:
-                        sl_block = f"""
-                        <div>
-                            <div class="stat-label">Stop Loss (SL)</div>
-                            <div class="stat-value" style="color:#ffa726">${sl:,.2f}</div>
-                        </div>
-                        <div>
-                            <div class="stat-label">Loss at SL</div>
-                            <div class="stat-value" style="color:#ff1744">{fmt_inr(c['loss_inr'])}</div>
-                        </div>
-                        """
-                    if tg or sl:
-                        st.markdown(f"""
-                        <div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px">
-                            <div style="font-size:10px;color:#888;text-transform:uppercase;
-                                        letter-spacing:1px;margin-bottom:8px">Targets</div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                                {tg_block}{sl_block}
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown("""
-                        <div style="background:rgba(255,255,255,0.03);border-radius:8px;
-                                    padding:12px;text-align:center">
-                            <div class="stat-label">TG / SL</div>
-                            <div class="stat-value" style="color:#555">Not set</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-                # ---- Action Buttons ----
-                st.markdown("<div style='margin-top:8px'></div>", unsafe_allow_html=True)
                 btn1, btn2, _ = st.columns([2, 2, 5])
                 with btn1:
-                    if st.button("✏️ Edit", key=f"edit_{i}", use_container_width=True):
+                    if st.button("✏️ Edit", key=f"edit_{i}_{j}", use_container_width=True):
                         dialog_edit_position(orders, orders.index(o))
                 with btn2:
-                    if st.button("🗑️ Close", key=f"del_{i}", use_container_width=True):
+                    if st.button("🗑️ Close", key=f"del_{i}_{j}", use_container_width=True):
                         orders.remove(o)
                         save_orders(orders)
-                        st.success(f"Position {o['account']} [{sym}] removed.")
+                        st.success(f"Entry closed — {acc} [{sym}]")
                         st.rerun()
+
+                if j < len(entries) - 1:
+                    st.markdown("<div style='border-top:1px dashed rgba(128,128,128,0.2);margin:10px 0'></div>", unsafe_allow_html=True)
 
 # ==========================================
 # PROJECTION FEATURE
