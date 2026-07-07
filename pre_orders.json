@@ -1,14 +1,1 @@
-[
-  {
-    "account": "A-6",
-    "symbol": "ETH",
-    "side": "Buy",
-    "target_entry_price": 1805.0,
-    "qty": 0.03,
-    "liquidation": null,
-    "target": null,
-    "stop_loss": null,
-    "alert_threshold": 3.0,
-    "created_at": "2026-07-07 16:40:35.086857"
-  }
-]
+[]
