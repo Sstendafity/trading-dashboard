@@ -2224,7 +2224,7 @@ if orders:
             sl = o.get("stop_loss")
 
             # Auto-expand if danger >= 70%
-            should_expand = cards_expanded or danger_pct >= 70
+            should_expand = cards_expanded
 
             with st.expander(
                 f"{o['account']} [{sym}] ({ACCOUNT_GROUP.get(o['account'], '?')}) "
