@@ -44,11 +44,19 @@ st.markdown("""
 <style>
 [class*="st-key-btnrow_"] [data-testid="stHorizontalBlock"] {
     flex-wrap: nowrap !important;
-    gap: 4px !important;
+    gap: 6px !important;
+    width: 100% !important;
+}
+[class*="st-key-btnrow_"] [data-testid="stColumn"] {
+    flex: 1 1 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
 }
 [class*="st-key-btnrow_"] button {
-    padding: 4px 10px !important;
+    width: 100% !important;
+    padding: 4px 6px !important;
     min-height: 32px !important;
+    font-size: 13px !important;
 }
 </style>
 """, unsafe_allow_html=True)
