@@ -5,15 +5,13 @@ import json
 import os
 import datetime
 import time
-import ccxt
 from github import Github
 import sys
 sys.path.insert(0, os.getcwd())
 from auth import check_password
-import math
-import mplfinance as mpf
-import matplotlib.pyplot as plt
-import io
+
+from core.price_feed import fetch_ticker, fetch_ohlcv as core_fetch_ohlcv
+from core.charts import build_candlestick_chart, fmt_volume
 
 # if not check_password():
 #     st.stop()
@@ -168,84 +166,11 @@ def fmt_lots(qty, symbol="BTC"):
 # PRICE FETCHING
 # ==========================================
 
-def fetch_with_ccxt(symbol='BTC/USDT'):
-    exchanges_to_try = ['okx', 'kucoin', 'gateio', 'htx']
-    for exchange_id in exchanges_to_try:
-        try:
-            exchange = getattr(ccxt, exchange_id)({
-                'timeout': 10000,
-                'enableRateLimit': False,
-            })
-            ticker = exchange.fetch_ticker(symbol)
-            return {
-                "price": float(ticker['last']),
-                "change_pct": float(ticker['percentage'] or 0),
-                "high": float(ticker['high'] or 0),
-                "low": float(ticker['low'] or 0),
-                "ok": True,
-                "source": exchange_id
-            }
-        except Exception:
-            continue
-    return None
+# Price fetching (rich ticker dict) now lives in core.price_feed.
+# `_do_fetch` is kept as a local alias so existing call sites stay unchanged.
+_do_fetch = fetch_ticker
 
-def fetch_with_coingecko(coin_id='bitcoin'):
-    r = requests.get(
-        f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids={coin_id}",
-        timeout=10
-    )
-    data = r.json()[0]
-    return {
-        "price": float(data["current_price"]),
-        "change_pct": float(data["price_change_percentage_24h"] or 0),
-        "high": float(data["high_24h"]),
-        "low": float(data["low_24h"]),
-        "ok": True,
-        "source": "coingecko"
-    }
-
-def fetch_with_bybit(symbol='BTCUSDT'):
-    r = requests.get(
-        f"https://api.bybit.com/v5/market/tickers?category=linear&symbol={symbol}",
-        timeout=10
-    )
-    data = r.json()["result"]["list"][0]
-    return {
-        "price": float(data["lastPrice"]),
-        "change_pct": float(data["price24hPcnt"]) * 100,
-        "high": float(data["highPrice24h"]),
-        "low": float(data["lowPrice24h"]),
-        "ok": True,
-        "source": "bybit"
-    }
-
-def _do_fetch(symbol='BTC'):
-    """Fetch price for BTC or ETH."""
-    ccxt_sym = f"{symbol}/USDT"
-    bybit_sym = f"{symbol}USDT"
-    coin_id = 'bitcoin' if symbol == 'BTC' else 'ethereum'
-    try:
-        result = fetch_with_ccxt(ccxt_sym)
-        if result:
-            return result
-    except Exception:
-        pass
-    try:
-        return fetch_with_coingecko(coin_id)
-    except Exception:
-        pass
-    try:
-        return fetch_with_bybit(bybit_sym)
-    except Exception:
-        pass
-    return None
-
-def fmt_volume(vol, price):
-    vol_usd = vol * price
-    if vol_usd >= 1_000_000:
-        return f"{vol_usd / 1_000_000:,.2f}M"
-    else:
-        return f"{vol_usd / 1_000:,.1f}K"
+# fmt_volume is imported from core.charts.
 
 # ==========================================
 # STORAGE
@@ -413,47 +338,11 @@ def get_order_cp(order):
 # ==========================================
 # CHART BUILDER
 # ==========================================
-
-def build_candlestick_chart(df_chart, chart_title):
-    mc = mpf.make_marketcolors(
-        up='#00e676', down='#ff1744',
-        edge='inherit', wick='inherit',
-        volume={'up': '#00e676', 'down': '#ff1744'},
-    )
-    style = mpf.make_mpf_style(
-        marketcolors=mc, base_mpf_style='nightclouds',
-        gridstyle='--', gridcolor='#2a2a4a',
-        facecolor='#0f0f23', figcolor='#0f0f23',
-        y_on_right=True,
-        rc={'axes.labelcolor': '#aaaaaa', 'xtick.color': '#aaaaaa', 'ytick.color': '#aaaaaa'}
-    )
-    fig, axes = mpf.plot(
-        df_chart, type='candle', style=style,
-        ylabel='', volume=True, ylabel_lower='',
-        figsize=(14, 8), returnfig=True, tight_layout=True,
-        datetime_format='%m-%d %H:%M', xrotation=30,
-    )
-    axes[0].set_title(chart_title, color='#cccccc', fontsize=10,
-                      fontfamily='monospace', loc='center', pad=10)
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight',
-                facecolor='#0f0f23', edgecolor='none')
-    buf.seek(0)
-    plt.close(fig)
-    return buf.getvalue()
+# build_candlestick_chart is imported from core.charts.
 
 def send_chart_telegram(symbol, TELEGRAM_TOKEN, TELEGRAM_CHAT_IDS_UI):
     """Fetch OHLCV, build chart, send to Telegram. Used by both BTC and ETH buttons."""
-    ccxt_sym = f"{symbol}/USDT"
-    exchanges_to_try = ['okx', 'kucoin', 'gateio', 'htx']
-    ohlcv = None
-    for exchange_id in exchanges_to_try:
-        try:
-            exchange = getattr(ccxt, exchange_id)({'timeout': 10000, 'enableRateLimit': True})
-            ohlcv = exchange.fetch_ohlcv(ccxt_sym, timeframe='1h', limit=48)
-            break
-        except Exception:
-            continue
+    ohlcv = core_fetch_ohlcv(symbol)
     if not ohlcv:
         st.error(f"❌ Could not fetch {symbol} OHLCV data.")
         return

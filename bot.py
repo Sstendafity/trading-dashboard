@@ -10,15 +10,12 @@ Commands:
 import os
 import time
 import json
-import math
 import datetime
 import requests
 
-try:
-    import ccxt
-    CCXT_AVAILABLE = True
-except ImportError:
-    CCXT_AVAILABLE = False
+from core.price_feed import fetch_price, fetch_ohlcv
+from core.telegram import send_message, get_updates as _core_get_updates
+from core.pnl_report import build_report_msg
 
 # ==========================================
 # CONFIGURATION
@@ -59,61 +56,8 @@ awaiting_interval = {}
 # PRICE FETCHING
 # ==========================================
 
-def fetch_with_ccxt():
-    if not CCXT_AVAILABLE:
-        return None
-    exchanges_to_try = ['okx', 'kucoin', 'gateio', 'htx']
-    for exchange_id in exchanges_to_try:
-        try:
-            exchange = getattr(ccxt, exchange_id)({
-                'timeout': 10000,
-                'enableRateLimit': False,
-            })
-            ticker = exchange.fetch_ticker('BTC/USDT')
-            price = float(ticker['last'])
-            print(f"Price fetched via CCXT ({exchange_id}): ${price:,.2f}")
-            return price
-        except Exception as e:
-            print(f"CCXT {exchange_id} failed: {e}")
-            continue
-    return None
-
-def fetch_with_coingecko():
-    r = requests.get(
-        "https://api.coingecko.com/api/v3/coins/markets"
-        "?vs_currency=usd&ids=bitcoin",
-        timeout=10
-    )
-    price = float(r.json()[0]["current_price"])
-    print(f"Price fetched via CoinGecko: ${price:,.2f}")
-    return price
-
-def fetch_with_bybit():
-    r = requests.get(
-        "https://api.bybit.com/v5/market/tickers"
-        "?category=linear&symbol=BTCUSDT",
-        timeout=10
-    )
-    price = float(r.json()["result"]["list"][0]["lastPrice"])
-    print(f"Price fetched via Bybit: ${price:,.2f}")
-    return price
-
 def fetch_btc_price():
-    try:
-        price = fetch_with_ccxt()
-        if price:
-            return price
-    except Exception as e:
-        print(f"CCXT failed: {e}")
-    try:
-        return fetch_with_coingecko()
-    except Exception as e:
-        print(f"CoinGecko failed: {e}")
-    try:
-        return fetch_with_bybit()
-    except Exception as e:
-        print(f"Bybit failed: {e}")
-    raise Exception("All price sources failed")
+    return fetch_price('BTC')
 
 def fetch_btc_ticker():
     """
@@ -130,25 +74,14 @@ def fetch_btc_ticker():
         return current_price, cached_open_price
 
     # New day or first run — fetch today's daily candle open
-    if CCXT_AVAILABLE:
-        exchanges_to_try = ['okx', 'kucoin', 'gateio', 'htx']
-        for exchange_id in exchanges_to_try:
-            try:
-                exchange = getattr(ccxt, exchange_id)({
-                    'timeout': 10000,
-                    'enableRateLimit': True,
-                })
-                ohlcv = exchange.fetch_ohlcv('BTC/USDT', timeframe='1d', limit=2)
-                if ohlcv and len(ohlcv) >= 1:
-                    cached_open_price = float(ohlcv[-1][1])
-                    cached_open_date = today
-                    print(f"Daily open cached ({exchange_id}): ${cached_open_price:,.2f} ({today})")
-                    return current_price, cached_open_price
-            except Exception as e:
-                print(f"OHLCV {exchange_id} failed: {e}")
-                continue
+    ohlcv = fetch_ohlcv('BTC', timeframe='1d', limit=2)
+    if ohlcv and len(ohlcv) >= 1:
+        cached_open_price = float(ohlcv[-1][1])
+        cached_open_date = today
+        print(f"Daily open cached: ${cached_open_price:,.2f} ({today})")
+        return current_price, cached_open_price
 
-    # CCXT unavailable — fall back to current price
+    # No candle available — fall back to current price
     cached_open_price = current_price
     cached_open_date = today
     print(f"Open price fallback: ${cached_open_price:,.2f} ({today})")
@@ -201,104 +134,17 @@ def load_alert_configs():
 # ==========================================
 
 def send_telegram(message, chat_id):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    try:
-        r = requests.post(url, json={
-            "chat_id": chat_id,
-            "text": message,
-            "parse_mode": "HTML"
-        }, timeout=10)
-        return r.ok
-    except Exception as e:
-        print(f"Send failed: {e}")
-        return False
+    return send_message(TELEGRAM_TOKEN, chat_id, message)
 
 def get_updates(offset=None):
-    params = {"timeout": 0, "limit": 10}
-    if offset is not None:
-        params["offset"] = offset
-    try:
-        r = requests.get(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates",
-            params=params,
-            timeout=10
-        )
-        if r.ok:
-            return r.json().get("result", [])
-    except Exception as e:
-        print(f"getUpdates failed: {e}")
-    return []
+    return _core_get_updates(TELEGRAM_TOKEN, offset=offset)
 
 # ==========================================
 # REPORT BUILDER
 # ==========================================
 
 def build_report(orders, current_price):
-    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-
-    total_usd = 0
-    total_profit = 0
-    total_loss = 0
-    total_inr = 0
-    profit_count = 0
-    loss_count = 0
-    buy_qty = 0
-    sell_qty = 0
-    order_pnls = []
-
-    active_accounts = {o.get("account") for o in orders}
-    inactive_accounts = [a for a in ALL_ACCOUNTS if a not in active_accounts]
-
-    for o in orders:
-        side = o.get("side", "Buy")
-        entry = o.get("entry_price", 0) or 0
-        qty = o.get("qty", 0) or 0
-        running_usd = (current_price - entry) * qty if side == "Buy" else (entry - current_price) * qty
-        running_inr = running_usd * USD_TO_INR
-        total_usd += running_usd
-        total_inr += running_inr
-        if running_inr > 0:
-            profit_count += 1
-            total_profit += running_inr
-        elif running_inr < 0:
-            loss_count += 1
-            total_loss += running_inr
-        order_pnls.append((o, running_usd, running_inr))
-        if side == "Buy":
-            buy_qty += qty
-        else:
-            sell_qty += qty
-
-    order_pnls.sort(key=lambda x: x[2], reverse=True)
-
-    lines = []
-    for o, running_usd, running_inr in order_pnls:
-        side_emoji = "🟢" if o.get("side") == "Buy" else "🔴"
-        pnl_sign = "+" if running_inr >= 0 else ""
-        lines.append(
-            f"  {side_emoji} <b>{o.get('account')}</b> "
-            f"@ ${o.get('entry_price', 0):,.1f} | {btc_to_lots(o.get('qty', 0))} lots "
-            f"→ <code>{pnl_sign}₹{running_inr:,.0f}</code>"
-        )
-
-    total_sign = "+" if total_inr >= 0 else ""
-
-    msg = (
-        f"<b>CP</b>: <code>${current_price:,.1f}</code>\n"
-        f"P: {profit_count} | <code>{total_sign}₹{total_profit:,.0f}</code>\n"
-        f"L: {loss_count} | <code>{total_sign}₹{total_loss:,.0f}</code>\n"
-        f"<b>T</b>: <code>{total_sign}₹{total_inr:,.0f}</code>\n"
-        f"BQ: {btc_to_lots(buy_qty)} lots\n"
-        f"SQ: {btc_to_lots(sell_qty)} lots\n"
-        f"\n"
-    )
-    msg += "\n".join(lines)
-    msg += (
-        f"\n\n"
-        f"Total Orders: {len(orders)}\n"
-        f"Idle Accounts ({len(inactive_accounts)}): {', '.join(inactive_accounts) if inactive_accounts else 'None'}"
-    )
-    return msg
+    return build_report_msg(orders, current_price, ALL_ACCOUNTS, LOT_SIZE)
 
 # ==========================================
 # PRICE INTERVAL ALERT LOGIC

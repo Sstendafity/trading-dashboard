@@ -8,6 +8,7 @@ import datetime
 import re
 from github import Github
 from auth import check_password
+from core.config import normalize_account_name, SIDE_MAP, TARGET_COLS
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Pro Trading Dashboard", layout="wide")
@@ -93,12 +94,11 @@ def load_master_db():
         try:
             db = pd.read_csv(MASTER_DB)
             if 'Account' in db.columns:
-                db['Account'] = db['Account'].astype(str).apply(lambda x: re.sub(r'^([a-zA-Z]+)(\d+)$', r'\1-\2', x.strip()))
-            
+                db['Account'] = db['Account'].astype(str).apply(normalize_account_name)
+
             # --- CHANGE: Normalize 'Side' terminology instantly ---
             if 'Side' in db.columns:
-                side_map = {'buy': 'Long', 'long': 'Long', 'sell': 'Short', 'short': 'Short', 'unknown': 'Unknown'}
-                db['Side'] = db['Side'].astype(str).str.lower().map(side_map).fillna('Unknown')
+                db['Side'] = db['Side'].astype(str).str.lower().map(SIDE_MAP).fillna('Unknown')
                 
             return db
         except Exception:
@@ -119,12 +119,11 @@ def save_to_master(new_df):
     
     # --- ADD THIS: Normalize Account Names before saving (A6 -> A-6) ---
     if 'Account' in combined.columns:
-        combined['Account'] = combined['Account'].astype(str).apply(lambda x: re.sub(r'^([a-zA-Z]+)(\d+)$', r'\1-\2', x.strip()))
-        
+        combined['Account'] = combined['Account'].astype(str).apply(normalize_account_name)
+
     # --- CHANGE: Normalize 'Side' terminology before saving ---
     if 'Side' in combined.columns:
-        side_map = {'buy': 'Long', 'long': 'Long', 'sell': 'Short', 'short': 'Short', 'unknown': 'Unknown'}
-        combined['Side'] = combined['Side'].astype(str).str.lower().map(side_map).fillna('Unknown')
+        combined['Side'] = combined['Side'].astype(str).str.lower().map(SIDE_MAP).fillna('Unknown')
     
     if 'Date' in combined.columns:
         def fix_date_time(row):
@@ -197,13 +196,12 @@ def process_pnl_statement(df, filename):
     df['Status'] = 'closed'
     df['Account'] = account_name
     
-    target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
-                   'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
+    target_cols = TARGET_COLS
     return df[target_cols]
 def process_zebpay_format(df, filename):
     """Logic for ZebPay TXNHISTORY_STATEMENT format (A-15)"""
     account_name = filename.split()[0].replace('.xlsx', '').replace('.csv', '')
-    account_name = re.sub(r'^([a-zA-Z]+)(\d+)$', r'\1-\2', account_name)
+    account_name = normalize_account_name(account_name)
 
     # Only process rows that belong to an actual trade (have a Trade ID)
     df = df[df['Trade ID'].notna()].copy()
@@ -249,8 +247,7 @@ def process_zebpay_format(df, filename):
     result['Realised P&L(INR)'] = result['PnL']
     result['Trading Fees(INR)'] = result['Fees']
 
-    target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side',
-                   'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
+    target_cols = TARGET_COLS
     return result[target_cols]
 
 def process_future_position_history(df, filename):
@@ -280,15 +277,14 @@ def process_future_position_history(df, filename):
     df['Status'] = 'closed'
     df['Account'] = account_name
     
-    target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
-                   'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
+    target_cols = TARGET_COLS
     return df[target_cols]
 
 def process_a4_format(df, filename):
     """Logic for the new A-4 Trades file format"""
     # Standardize Account Name (e.g. A4 -> A-4)
     account_name = filename.split()[0].replace('.xlsx', '').replace('.csv', '')
-    account_name = re.sub(r'^([a-zA-Z]+)(\d+)$', r'\1-\2', account_name)
+    account_name = normalize_account_name(account_name)
     
     # Clean Dates using Executed At
     df['dt'] = pd.to_datetime(df['Executed At'], errors='coerce')
@@ -308,8 +304,7 @@ def process_a4_format(df, filename):
     df['Status'] = 'closed'
     df['Account'] = account_name
     
-    target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
-                   'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
+    target_cols = TARGET_COLS
     return df[target_cols]
 
 def process_coindcx_future(df, filename):
@@ -337,14 +332,13 @@ def process_coindcx_future(df, filename):
     df['Status'] = 'closed'
     df['Account'] = account_name
     
-    target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 
-                   'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
+    target_cols = TARGET_COLS
     return df[target_cols]
 
 def process_gts_format(df, filename):
     """Logic for GTS (Giottus) transaction_history format (A-16)"""
     account_name = filename.split()[0].replace('.csv', '').replace('.xlsx', '')
-    account_name = re.sub(r'^([a-zA-Z]+)(\d+)$', r'\1-\2', account_name)
+    account_name = normalize_account_name(account_name)
 
     USD_TO_INR = 85.0
 
@@ -448,7 +442,7 @@ def process_binance_format(df, filename):
     Date format: YY-MM-DD HH:MM:SS
     """
     account_name = filename.split()[0].replace('.xlsx', '').replace('.csv', '')
-    account_name = re.sub(r'^([a-zA-Z]+)(\d+)$', r'\1-\2', account_name)
+    account_name = normalize_account_name(account_name)
  
     USD_TO_INR = 85.0
  
@@ -560,7 +554,7 @@ def process_legacy_csv(df, filename):
     if 'Order ID' in df.columns:
         df['Order ID'] = df['Order ID'].astype(str)
     
-    target_cols = ['Account', 'Date', 'Time', 'Contract', 'Side', 'Realised P&L(INR)', 'Trading Fees(INR)', 'Status', 'Order ID']
+    target_cols = TARGET_COLS
     available_cols = [c for c in target_cols if c in df.columns]
     return df[available_cols]
 
