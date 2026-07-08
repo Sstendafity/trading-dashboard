@@ -40,6 +40,19 @@ ACCOUNT_GROUP = {
 
 SYMBOLS = ["BTC", "ETH"]
 
+st.markdown("""
+<style>
+[class*="st-key-btnrow_"] [data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+}
+[class*="st-key-btnrow_"] button {
+    padding: 4px 10px !important;
+    min-height: 32px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ==========================================
 # CUSTOM CSS
 # ==========================================
@@ -136,6 +149,25 @@ div.stButton > button {
     padding-right: 16px;
     height: auto;
 }
+.pre-order-card {
+    background: var(--secondary-background-color);
+    border: 1px solid rgba(128,128,128,0.15);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 4px;
+}
+.po-top-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.po-price-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}            
 /* Offset so quick-nav jumps don't land under the top toolbar */
 h1, h2, h3 { scroll-margin-top: 3.5rem; }
 /* Quick-nav pill links */
@@ -2035,7 +2067,6 @@ if pre_orders:
         side_color = "#00c853" if side == "Buy" else "#ff1744"
         side_arrow = "↑" if side == "Buy" else "↓"
 
-        # Determine current mode
         will_pyramid = any(
             o["account"] == po["account"] and o.get("symbol", "BTC") == sym and o["side"] == side
             for o in orders
@@ -2045,37 +2076,34 @@ if pre_orders:
         curr_price = st.session_state.get("current_eth_cp", 0) if sym == "ETH" else st.session_state.get("current_cp", 0)
         dist_str = f"${abs(curr_price - target):,.2f} away" if curr_price > 0 else "—"
 
-        pc1, pc2, pc3 = st.columns([9, 1, 1])
-        with pc1:
-            st.markdown(f"""
-            <div style="background:var(--secondary-background-color);
-                        border:1px solid rgba(128,128,128,0.15);
-                        border-left: 3px solid {side_color};
-                        border-radius:8px;padding:12px 16px;
-                        display:flex;justify-content:space-between;align-items:center">
-                <div>
-                    <span style="font-weight:700">{po['account']}</span>
-                    <span style="color:#888;font-size:12px;margin-left:6px">({exchange})</span>
-                    <span style="color:{side_color};font-weight:700;margin-left:10px">{side_arrow} {side.upper()}</span>
-                    <span style="color:#888;font-size:12px;margin-left:6px">[{sym}]</span>
-                    <span style="font-size:11px;margin-left:10px;opacity:0.8">{mode_label}</span>
-                </div>
-                <div style="text-align:right">
-                    <div style="font-size:16px;font-weight:700;font-family:monospace">@ ${target:,.2f}</div>
-                    <div style="font-size:12px;color:#888">{lots} lots · {dist_str}</div>
-                </div>
+        st.markdown(f"""
+        <div class="pre-order-card" style="border-left: 3px solid {side_color}">
+            <div class="po-top-row">
+                <span style="font-weight:700;font-size:14px">{po['account']}</span>
+                <span style="color:#888;font-size:11px">({exchange})</span>
+                <span style="color:{side_color};font-weight:700;font-size:13px">{side_arrow} {side.upper()}</span>
+                <span style="color:#888;font-size:11px">[{sym}]</span>
+                <span style="font-size:10px;opacity:0.8">{mode_label}</span>
             </div>
-            """, unsafe_allow_html=True)
-        with pc2:
-            if st.button("✏️", key=f"edit_pre_{i}", help="Edit pre-order"):
-                dialog_edit_pre_order(pre_orders, i, orders)
-        with pc3:
-            if st.button("✕", key=f"del_pre_{i}", help="Cancel pre-order"):
-                pre_orders.pop(i)
-                save_pre_orders(pre_orders)
-                st.rerun()
+            <div class="po-price-row">
+                <span style="font-size:12px;color:#888">{lots} lots · {dist_str}</span>
+                <span style="font-size:16px;font-weight:700;font-family:monospace">@ ${target:,.2f}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.markdown("---")
+        with st.container(key=f"btnrow_pre_{i}"):
+            bc1, bc2 = st.columns(2)
+            with bc1:
+                if st.button("✏️ Edit", key=f"edit_pre_{i}", use_container_width=True):
+                    dialog_edit_pre_order(pre_orders, i, orders)
+            with bc2:
+                if st.button("✕ Cancel", key=f"del_pre_{i}", use_container_width=True):
+                    pre_orders.pop(i)
+                    save_pre_orders(pre_orders)
+                    st.rerun()
+
+        st.markdown("<div style='margin-bottom:10px'></div>", unsafe_allow_html=True)
 
 # ==========================================
 # STOP-ORDERS SECTION
@@ -2091,38 +2119,33 @@ if stop_orders:
         curr_price = st.session_state.get("current_eth_cp", 0) if sym == "ETH" else st.session_state.get("current_cp", 0)
         dist_str = f"${abs(curr_price - so['trigger_price']):,.2f} away" if curr_price > 0 else "—"
 
-        pc1, pc2, pc3 = st.columns([9, 1, 1])
-        with pc1:
-            st.markdown(f"""
-            <div style="background:var(--secondary-background-color);
-                        border:1px solid rgba(128,128,128,0.15);
-                        border-left: 3px solid #ffa726;
-                        border-radius:8px;padding:12px 16px;
-                        display:flex;justify-content:space-between;align-items:center">
-                <div>
-                    <span style="font-weight:700">{so['target_account']}</span>
-                    <span style="color:#888;font-size:12px;margin-left:6px">({exchange})</span>
-                    <span style="color:#ffa726;font-weight:700;margin-left:10px">{so['target_side'].upper()}</span>
-                    <span style="color:#888;font-size:12px;margin-left:6px">[{sym}]</span>
-                </div>
-                <div style="text-align:right">
-                    <div style="font-size:16px;font-weight:700;font-family:monospace">
-                        Price {direction_label} ${so['trigger_price']:,.2f}
-                    </div>
-                    <div style="font-size:12px;color:#888">close {lots} lots · {dist_str}</div>
-                </div>
+        st.markdown(f"""
+        <div class="pre-order-card" style="border-left: 3px solid #ffa726">
+            <div class="po-top-row">
+                <span style="font-weight:700;font-size:14px">{so['target_account']}</span>
+                <span style="color:#888;font-size:11px">({exchange})</span>
+                <span style="color:#ffa726;font-weight:700;font-size:13px">{so['target_side'].upper()}</span>
+                <span style="color:#888;font-size:11px">[{sym}]</span>
             </div>
-            """, unsafe_allow_html=True)
-        with pc2:
-            if st.button("✏️", key=f"edit_so_{i}", help="Edit stop-order"):
-                dialog_edit_stop_order(stop_orders, i, orders)
-        with pc3:
-            if st.button("✕", key=f"del_so_{i}", help="Cancel stop-order"):
-                stop_orders.pop(i)
-                save_stop_orders(stop_orders)
-                st.rerun()
+            <div class="po-price-row">
+                <span style="font-size:12px;color:#888">close {lots} lots · {dist_str}</span>
+                <span style="font-size:16px;font-weight:700;font-family:monospace">Price {direction_label} ${so['trigger_price']:,.2f}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.markdown("---")
+        with st.container(key=f"btnrow_so_{i}"):
+            bc1, bc2 = st.columns(2)
+            with bc1:
+                if st.button("✏️ Edit", key=f"edit_so_{i}", use_container_width=True):
+                    dialog_edit_stop_order(stop_orders, i, orders)
+            with bc2:
+                if st.button("✕ Cancel", key=f"del_so_{i}", use_container_width=True):
+                    stop_orders.pop(i)
+                    save_stop_orders(stop_orders)
+                    st.rerun()
+
+        st.markdown("<div style='margin-bottom:10px'></div>", unsafe_allow_html=True)
 
 # ==========================================
 # POSITION CARDS
