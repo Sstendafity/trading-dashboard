@@ -136,6 +136,23 @@ div.stButton > button {
     padding-right: 16px;
     height: auto;
 }
+/* Offset so quick-nav jumps don't land under the top toolbar */
+h1, h2, h3 { scroll-margin-top: 3.5rem; }
+/* Quick-nav pill links */
+.quicknav { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:2px 0 12px 0; }
+.quicknav .label {
+    font-size:11px; color:#888; text-transform:uppercase;
+    letter-spacing:1px; margin-right:2px;
+}
+.quicknav a {
+    text-decoration:none;
+    background: var(--secondary-background-color);
+    border:1px solid rgba(128,128,128,0.25);
+    border-radius:20px; padding:5px 14px;
+    font-size:13px; font-weight:600;
+    color: var(--text-color); white-space:nowrap;
+}
+.quicknav a:hover { border-color:#00c853; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -334,6 +351,34 @@ def get_order_cp(order):
     if sym == "ETH":
         return st.session_state.get("price_cache_eth", {}).get("price", 0)
     return st.session_state.get("price_cache", {}).get("price", 0)
+
+# ==========================================
+# QUICK NAV
+# ==========================================
+
+def render_quick_nav(orders, pre_orders, stop_orders):
+    """Render a compact 'Jump to' bar linking to each on-page section.
+
+    Only sections that will actually render (based on current data) are shown,
+    so every link points at a real anchor.
+    """
+    items = []
+    if orders:
+        items.append(("summary", "📊 Summary"))
+        items.append(("position-analysis", "📋 Analysis"))
+    if pre_orders:
+        items.append(("pre-orders", "⏳ Pre-Orders"))
+    if stop_orders:
+        items.append(("stop-orders", "🛑 Stop-Orders"))
+    if orders:
+        items.append(("position-cards", "🗂️ Positions"))
+    items.append(("projection", "🔮 Projection"))
+
+    pills = "".join(f'<a href="#{aid}">{label}</a>' for aid, label in items)
+    st.markdown(
+        f'<div class="quicknav"><span class="label">Jump to</span>{pills}</div>',
+        unsafe_allow_html=True,
+    )
 
 # ==========================================
 # CHART BUILDER
@@ -1646,7 +1691,7 @@ def live_dashboard(orders):
     eth_net_color = "#00e676" if eth_net_inr >= 0 else "#ff1744"
     ts = "+" if total_inr >= 0 else ""
 
-    st.markdown("### 📊 Summary")
+    st.subheader("📊 Summary", anchor="summary")
 
     # Row 1 — Overall
     st.markdown("##### Overall")
@@ -1754,7 +1799,7 @@ def live_dashboard(orders):
     st.markdown("---")
 
     # Analysis table
-    st.markdown("### 📋 Position Analysis")
+    st.subheader("📋 Position Analysis", anchor="position-analysis")
     sorted_pairs = sorted(zip(orders, calcs), key=lambda x: x[1]["running_inr"])
     table_rows = []
     for o, c in sorted_pairs:
@@ -1928,6 +1973,11 @@ def live_dashboard(orders):
 st.title("⚡ Live Order Monitor")
 
 orders = load_orders()
+pre_orders = load_pre_orders()
+stop_orders = load_stop_orders()
+
+# Quick-nav bar — jump to any section on the page
+render_quick_nav(orders, pre_orders, stop_orders)
 
 # Price interval alert state
 for key, default in [
@@ -1946,9 +1996,6 @@ live_dashboard(orders)
 cp = st.session_state.get("current_cp", 0)
 eth_cp = st.session_state.get("current_eth_cp", 0)
 
-pre_orders = load_pre_orders()
-stop_orders = load_stop_orders()
-
 btn_add1, btn_add2, btn_add3 = st.columns(3)
 with btn_add1:
     if st.button("➕ Add New Position", use_container_width=True):
@@ -1964,7 +2011,7 @@ with btn_add3:
 # PRE-ORDERS SECTION
 # ==========================================
 if pre_orders:
-    st.markdown("### ⏳ Pending Pre-Orders")
+    st.subheader("⏳ Pending Pre-Orders", anchor="pre-orders")
     for i, po in enumerate(pre_orders):
         sym = po.get("symbol", "BTC")
         side = po.get("side", "Buy")
@@ -2020,7 +2067,7 @@ if pre_orders:
 # STOP-ORDERS SECTION
 # ==========================================
 if stop_orders:
-    st.markdown("### 🛑 Pending Stop-Orders")
+    st.subheader("🛑 Pending Stop-Orders", anchor="stop-orders")
     for i, so in enumerate(stop_orders):
         sym = so.get("target_symbol", "BTC")
         lots = qty_to_lots(so.get("qty", 0) or 0, sym)
@@ -2068,7 +2115,7 @@ if stop_orders:
 # ==========================================
 
 if orders:
-    st.markdown("### 🗂️ Position Cards")
+    st.subheader("🗂️ Position Cards", anchor="position-cards")
 
     # Filters row
     filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
@@ -2302,7 +2349,7 @@ if orders:
 # ==========================================
 
 st.markdown("---")
-st.markdown("### 🔮 Position Projection")
+st.subheader("🔮 Position Projection", anchor="projection")
 st.caption("Simulate how your positions would look at different prices.")
 
 proj_col1, proj_col2, proj_col3 = st.columns([2, 2, 3])
