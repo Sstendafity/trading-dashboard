@@ -5,10 +5,10 @@
     "side": "Buy",
     "entry_price": 81526.5,
     "qty": 0.007,
-    "liquidation": 55418.0,
+    "liquidation": 55431.0,
     "target": null,
     "stop_loss": null,
-    "added_at": "2026-07-05 04:40:11.324105",
+    "added_at": "2026-07-08 05:00:57.033291",
     "alert_threshold": 3.0
   },
   {
@@ -17,10 +17,10 @@
     "side": "Sell",
     "entry_price": 1614.5,
     "qty": 0.25,
-    "liquidation": 1865.35,
+    "liquidation": 1866.2,
     "target": null,
     "stop_loss": null,
-    "added_at": "2026-07-05 04:41:16.849672",
+    "added_at": "2026-07-08 05:01:38.667025",
     "alert_threshold": 3.0
   },
   {
@@ -29,10 +29,10 @@
     "side": "Buy",
     "entry_price": 81535.0,
     "qty": 0.007,
-    "liquidation": 56800.0,
+    "liquidation": 56809.0,
     "target": null,
     "stop_loss": null,
-    "added_at": "2026-07-05 04:42:29.071652",
+    "added_at": "2026-07-08 05:02:51.615565",
     "alert_threshold": 3.0
   },
   {
@@ -41,10 +41,10 @@
     "side": "Sell",
     "entry_price": 1645.55,
     "qty": 0.15,
-    "liquidation": 2052.3,
+    "liquidation": 2053.2,
     "target": null,
     "stop_loss": null,
-    "added_at": "2026-07-05 04:43:22.061135",
+    "added_at": "2026-07-08 05:06:13.555411",
     "alert_threshold": 3.0
   },
   {
@@ -56,7 +56,7 @@
     "liquidation": null,
     "target": null,
     "stop_loss": null,
-    "added_at": "2026-07-05 04:44:40.147591",
+    "added_at": "2026-07-08 05:07:01.879789",
     "alert_threshold": 3.0
   },
   {
@@ -68,7 +68,7 @@
     "liquidation": null,
     "target": null,
     "stop_loss": null,
-    "added_at": "2026-07-05 04:45:18.303816",
+    "added_at": "2026-07-08 05:07:37.104234",
     "alert_threshold": 3.0
   },
   {
@@ -80,7 +80,7 @@
     "liquidation": null,
     "target": null,
     "stop_loss": null,
-    "added_at": "2026-07-05 04:46:28.209511",
+    "added_at": "2026-07-08 05:08:07.091305",
     "alert_threshold": 3.0
   },
   {
@@ -92,7 +92,7 @@
     "liquidation": null,
     "target": null,
     "stop_loss": null,
-    "added_at": "2026-07-05 04:47:08.085330",
+    "added_at": "2026-07-08 05:08:41.003171",
     "alert_threshold": 3.0
   },
   {
@@ -104,7 +104,7 @@
     "liquidation": null,
     "target": null,
     "stop_loss": null,
-    "added_at": "2026-07-05 04:49:15.966943",
+    "added_at": "2026-07-08 05:09:09.178887",
     "alert_threshold": 3.0
   },
   {
@@ -116,7 +116,19 @@
     "liquidation": null,
     "target": null,
     "stop_loss": null,
-    "added_at": "2026-07-05 04:57:46.991927",
+    "added_at": "2026-07-08 05:09:46.113308",
+    "alert_threshold": 3.0
+  },
+  {
+    "account": "A-6",
+    "symbol": "ETH",
+    "side": "Buy",
+    "entry_price": 1793.75,
+    "qty": 0.15,
+    "liquidation": null,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-07-08 05:10:16.258020",
     "alert_threshold": 3.0
   },
   {
@@ -125,10 +137,10 @@
     "side": "Buy",
     "entry_price": 74755.3,
     "qty": 0.01,
-    "liquidation": 54883.2,
+    "liquidation": 54914.2,
     "target": null,
     "stop_loss": null,
-    "added_at": "2026-07-05 05:00:28.599175",
+    "added_at": "2026-07-08 05:10:54.684528",
     "alert_threshold": 3.0
   },
   {
@@ -137,70 +149,10 @@
     "side": "Buy",
     "entry_price": 64192.4,
     "qty": 0.002,
-    "liquidation": 60100.0,
+    "liquidation": 60065.8,
     "target": null,
     "stop_loss": null,
-    "added_at": "2026-07-05 05:10:29.159557",
-    "alert_threshold": 3.0
-  },
-  {
-    "account": "A-10",
-    "symbol": "BTC",
-    "side": "Buy",
-    "entry_price": 75548.8,
-    "qty": 0.007,
-    "liquidation": 54414.0,
-    "target": null,
-    "stop_loss": null,
-    "added_at": "2026-07-05 05:11:21.475700",
-    "alert_threshold": 3.0
-  },
-  {
-    "account": "A-12",
-    "symbol": "BTC",
-    "side": "Buy",
-    "entry_price": 64759.6,
-    "qty": 0.014,
-    "liquidation": 59045.9,
-    "target": null,
-    "stop_loss": null,
-    "added_at": "2026-07-05 05:12:24.679051",
-    "alert_threshold": 3.0
-  },
-  {
-    "account": "A-12",
-    "symbol": "ETH",
-    "side": "Sell",
-    "entry_price": 1569.45,
-    "qty": 0.24,
-    "liquidation": 1988.47,
-    "target": null,
-    "stop_loss": null,
-    "added_at": "2026-07-05 05:13:29.649519",
-    "alert_threshold": 3.0
-  },
-  {
-    "account": "A-15",
-    "symbol": "BTC",
-    "side": "Buy",
-    "entry_price": 70213.9,
-    "qty": 0.002,
-    "liquidation": 47710.1,
-    "target": null,
-    "stop_loss": null,
-    "added_at": "2026-07-05 05:15:23.251399",
-    "alert_threshold": 3.0
-  },
-  {
-    "account": "A-6",
-    "symbol": "ETH",
-    "side": "Buy",
-    "entry_price": 1793.75,
-    "qty": 0.1,
-    "liquidation": null,
-    "target": null,
-    "stop_loss": null,
-    "added_at": "2026-07-06 12:21:57.098994",
+    "added_at": "2026-07-08 05:11:33.229919",
     "alert_threshold": 3.0
   },
   {
@@ -209,10 +161,58 @@
     "side": "Sell",
     "entry_price": 1787.28,
     "qty": 0.11,
-    "liquidation": 1961.0,
+    "liquidation": 1960.65,
     "target": null,
     "stop_loss": null,
-    "added_at": "2026-07-06 17:50:33.504925",
+    "added_at": "2026-07-08 05:12:09.760728",
+    "alert_threshold": 3.0
+  },
+  {
+    "account": "A-10",
+    "symbol": "BTC",
+    "side": "Buy",
+    "entry_price": 75548.8,
+    "qty": 0.007,
+    "liquidation": 54445.0,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-07-08 05:12:47.183695",
+    "alert_threshold": 3.0
+  },
+  {
+    "account": "A-12",
+    "symbol": "BTC",
+    "side": "Buy",
+    "entry_price": 64759.6,
+    "qty": 0.014,
+    "liquidation": 59096.6,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-07-08 05:13:27.052745",
+    "alert_threshold": 3.0
+  },
+  {
+    "account": "A-12",
+    "symbol": "ETH",
+    "side": "Sell",
+    "entry_price": 1569.45,
+    "qty": 0.24,
+    "liquidation": 1989.28,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-07-08 05:14:07.950132",
+    "alert_threshold": 3.0
+  },
+  {
+    "account": "A-15",
+    "symbol": "BTC",
+    "side": "Buy",
+    "entry_price": 70213.9,
+    "qty": 0.002,
+    "liquidation": 47765.4,
+    "target": null,
+    "stop_loss": null,
+    "added_at": "2026-07-08 05:14:47.459352",
     "alert_threshold": 3.0
   }
 ]
