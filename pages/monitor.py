@@ -356,6 +356,18 @@ def get_order_cp(order):
 # QUICK NAV
 # ==========================================
 
+def _has_hedge(orders):
+    """True if any account holds both a BTC and an ETH position.
+
+    Matches the visibility condition of the Cross-Pair Hedge section (its
+    `is_hedge` check is satisfied whenever both symbols are present).
+    """
+    by_acc = {}
+    for o in orders:
+        by_acc.setdefault(o["account"], set()).add(o.get("symbol", "BTC"))
+    return any("BTC" in syms and "ETH" in syms for syms in by_acc.values())
+
+
 def render_quick_nav(orders, pre_orders, stop_orders):
     """Render a compact 'Jump to' bar linking to each on-page section.
 
@@ -366,6 +378,8 @@ def render_quick_nav(orders, pre_orders, stop_orders):
     if orders:
         items.append(("summary", "📊 Summary"))
         items.append(("position-analysis", "📋 Analysis"))
+        if _has_hedge(orders):
+            items.append(("cross-pair-hedge", "🔀 Hedge"))
     if pre_orders:
         items.append(("pre-orders", "⏳ Pre-Orders"))
     if stop_orders:
@@ -1870,7 +1884,7 @@ def live_dashboard(orders):
             hedge_accounts.append(acc)
 
     if hedge_accounts:
-        st.markdown("### 🔀 Cross-Pair Hedge")
+        st.subheader("🔀 Cross-Pair Hedge", anchor="cross-pair-hedge")
         st.caption("Accounts with opposite BTC/ETH positions — combined running P&L.")
 
         for acc in sorted(hedge_accounts):
