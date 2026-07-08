@@ -13,18 +13,6 @@
   },
   {
     "account": "A-9",
-    "symbol": "ETH",
-    "side": "Sell",
-    "target_entry_price": 1720.0,
-    "qty": 0.04,
-    "liquidation": null,
-    "target": null,
-    "stop_loss": null,
-    "alert_threshold": 3.0,
-    "created_at": "2026-07-08 14:18:06.585765"
-  },
-  {
-    "account": "A-9",
     "symbol": "BTC",
     "side": "Buy",
     "target_entry_price": 62400.0,
